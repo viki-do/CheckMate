@@ -167,7 +167,8 @@ def analyze_full_game(game_id: str, user_id: str = Depends(get_current_user_id),
         "overall_accuracy": overall_accuracy,
         "summary": summary,
         "analysis": full_analysis,
-        "player_color": game.player_color
+        "player_color": game.player_color,
+        "opening": get_opening_with_fallback(db, game_uuid)
     }
 
 def get_skill_level_from_elo(elo: int) -> int:
@@ -827,13 +828,16 @@ async def make_move(request: Request, data: dict, user_id: str = Depends(get_cur
                 ))
                 db.commit()
 
+                opening_data = get_opening_with_fallback(db, game_uuid)
+
                 # WebSocket értesítés (most már tartalmazza a thinking_time-ot)
                 await sio.emit("bot_moved", {
                     "game_id": str(game_uuid),
                     "fen": f_after,
                     "move": bot_res,
                     "thinking_time": think_time,
-                    "evaluation": bot_res["evaluation"]
+                    "evaluation": bot_res["evaluation"],
+                    "opening": opening_data
                 }, room=str(game_uuid))
 
         opening_data = get_opening_with_fallback(db, game_uuid)

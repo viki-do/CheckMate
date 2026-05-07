@@ -185,6 +185,9 @@ const GameBoard = () => {
         });
         
         setAnalysisData(res.data);
+        if (res.data.opening) {
+            gameLogic.setOpening(res.data.opening);
+        }
         
         setHistory(prev => prev.map(h => {
             // Megkeressük a backend elemzésében a sorszám alapján (num)
@@ -206,8 +209,22 @@ const GameBoard = () => {
     }
 };
 
+    const handleStartNewGame = useCallback(async (...args) => {
+        setAnalysisData(null);
+        setIsAnalyzing(false);
+        return startNewGame(...args);
+    }, [startNewGame]);
+
+    const handleResetGame = useCallback(() => {
+        setAnalysisData(null);
+        setIsAnalyzing(false);
+        gameLogic.resetGame();
+    }, [gameLogic]);
+
     const handleBotSelect = async (bot, color, time) => {
     setIsStarting(true);
+    setAnalysisData(null);
+    setIsAnalyzing(false);
     
     // 1. Azonnal mutassuk a botot a fejlécben
     setOpponent(bot); 
@@ -215,7 +232,7 @@ const GameBoard = () => {
 
     try {
         // 2. Új játék indítása
-        const assignedColor = await startNewGame(bot, color, time);
+        const assignedColor = await handleStartNewGame(bot, color, time);
         
         if (assignedColor) {
             // 3. Ha elindult, rögzítsük véglegesre az ellenfelet
@@ -381,7 +398,9 @@ const GameBoard = () => {
     const bottomClockSeconds = isGameActiveUI
         ? (isFlipped ? getDisplayTime('b') : getDisplayTime('w'))
         : selectedBaseTime;
-    const boardGameLogic = location.pathname === '/play'
+    const shouldShowDefaultBoard = location.pathname === '/play' ||
+        (location.pathname === '/play/bots' && !isGameActiveUI);
+    const boardGameLogic = shouldShowDefaultBoard
         ? {
             ...gameLogic,
             fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
@@ -393,7 +412,9 @@ const GameBoard = () => {
         : { ...gameLogic, isFlipped };
     const handlePopupNewGame = () => {
         setIsGameActiveUI(false);
-        gameLogic.resetGame();
+        setAnalysisData(null);
+        setIsAnalyzing(false);
+        handleResetGame();
         navigate('/play/bots');
     };
 
@@ -445,6 +466,8 @@ const GameBoard = () => {
             <div className="w-112.5 shrink-0 h-170 self-center flex flex-col">
                 <Outlet context={{ 
                 ...gameLogic, 
+                startNewGame: handleStartNewGame,
+                resetGame: handleResetGame,
                 gameId: gameLogic.gameId,
                 status: gameLogic.status,
                 isLoading: gameLogic.isLoading,

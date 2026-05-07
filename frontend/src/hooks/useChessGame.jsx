@@ -512,6 +512,10 @@ const initializeGame = useCallback(async () => {
             );
             moveRequestInFlightRef.current = false;
 
+            if (res.data.opening) {
+                setOpening(res.data.opening);
+            }
+
             if (res.data.is_game_over) {
                 setStatus(res.data.status);
                 setReason(res.data.reason);
@@ -802,6 +806,9 @@ useEffect(() => {
 
         setFen(data.fen);
         setLastMove({ from: botMove.from, to: botMove.to });
+        if (data.opening) {
+            setOpening(data.opening);
+        }
         setActiveTimeColor(nextTurnColor);
         
         // JAVÍTÁS: Itt nullázzuk a saját óránkat a következő lépéshez
