@@ -11,6 +11,7 @@ import GameDatabase from './pages/GameDatabase';
 import AnalyzeBoard from './components/AnalyzeBoard';
 import PlaySelectionPanel from './components/PlaySelectionPanel';
 import BotSelectionOrGame from './components/BotSelectionOrGame';
+import SettingsProfilePage from './pages/SettingsProfilePage';
 
 import { useChess } from './context/ChessContext';
 
@@ -69,6 +70,10 @@ const App = () => {
                             path="/analysis" 
                             element={isAuthenticated ? <AnalyzeBoard /> : <Navigate to="/login" />} 
                         />
+                        <Route 
+                            path="/analysis/game/master/:gameId/review" 
+                            element={isAuthenticated ? <AnalyzeBoard /> : <Navigate to="/login" />} 
+                        />
                         
                         <Route 
                             path="/member/:username" 
@@ -80,6 +85,11 @@ const App = () => {
                             element={isAuthenticated ? <ProfilePage archiveMode={true} /> : <Navigate to="/login" />} 
                         />
 
+                        <Route
+                            path="/settings/profile"
+                            element={isAuthenticated ? <SettingsProfilePage /> : <Navigate to="/login" />}
+                        />
+
                         <Route 
                             path="/games/archive/:username"
                             element={isAuthenticated ? <GameArchive /> : <Navigate to="/login" />} 
@@ -87,6 +97,14 @@ const App = () => {
 
                         <Route
                             path="/games"
+                            element={isAuthenticated ? <GameDatabase /> : <Navigate to="/login" />}
+                        />
+                        <Route
+                            path="/games/view/:gameId"
+                            element={isAuthenticated ? <GameDatabase /> : <Navigate to="/login" />}
+                        />
+                        <Route
+                            path="/games/:playerSlug"
                             element={isAuthenticated ? <GameDatabase /> : <Navigate to="/login" />}
                         />
 

@@ -4,20 +4,16 @@ import axios from 'axios';
 import { HeaderSection, StatBar, StatListItem, PlayButton, BoardCard } from '../components/component_helpers/PageHelpers';
 import React , { useMemo } from 'react';
 import { Chess } from 'chess.js';
+import GameHistoryTypeIcon from '../components/game-history/GameHistoryTypeIcon';
 
 const HomePage = () => {
     const navigate = useNavigate();
     const startFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
     const [reviewGame, setReviewGame] = React.useState(null);
+    const [gameHistory, setGameHistory] = React.useState([]);
+    const [isHistoryLoading, setIsHistoryLoading] = React.useState(false);
     const username = localStorage.getItem('chessUsername');
 
-    const gameHistory = [
-    { id: 1, type: 'bot', opponent: 'Maximum', elo: 3200, myElo: 484, result: '0-1', accuracy: ['80.4', '95.3'], moves: 18, date: 'Apr 4, 2026', win: false, iWasWhite: true },
-        { id: 2, type: 'bot', opponent: 'Maximum', elo: 3200, myElo: 484, result: '0-1', accuracy: ['95.9', '100'], moves: 5, date: 'Apr 4, 2026', win: false, iWasWhite: true },
-        { id: 3, type: '10 min', opponent: 'avizzean', elo: 510, myElo: 484, result: '0-1', accuracy: ['75.8', '81.9'], moves: 46, date: 'Apr 4, 2026', win: false, iWasWhite: true },
-        { id: 4, type: '3 days', opponent: 'nickplaysc...', elo: 1013, myElo: 1171, result: '1-0', accuracy: ['56.9', '44.9'], moves: 18, date: 'Apr 4, 2026', win: true, iWasWhite: true },
-        { id: 5, type: '1 day', opponent: 'sam2love', elo: 1299, myElo: 1131, result: '1-0', accuracy: ['85.4', '77.8'], moves: 34, date: 'Apr 4, 2026', win: true, iWasWhite: false },
-    ];
     React.useEffect(() => {
         const fetchLatest = async () => {
             try {
@@ -31,6 +27,26 @@ const HomePage = () => {
         };
         fetchLatest();
     }, []);
+
+    React.useEffect(() => {
+        if (!username) return;
+
+        let isMounted = true;
+        setIsHistoryLoading(true);
+
+        axios.get(`http://localhost:8000/user-games/${encodeURIComponent(username)}?offset=0&limit=5`)
+            .then((res) => {
+                if (isMounted) setGameHistory(res.data.games || []);
+            })
+            .catch(() => {
+                if (isMounted) setGameHistory([]);
+            })
+            .finally(() => {
+                if (isMounted) setIsHistoryLoading(false);
+            });
+
+        return () => { isMounted = false; };
+    }, [username]);
 
     return (
     <div className="flex flex-col p-10 bg-[#2f2e2a] min-h-screen font-sans text-[#bab9b8]">
@@ -126,12 +142,7 @@ const HomePage = () => {
                     onClick={() => navigate(`/games/archive/${username}`)} 
                     className="p-4 border-b border-[#3c3a37] bg-[#2b2926] flex justify-between items-center cursor-pointer group hover:bg-[#312e2b] transition-colors h-[57px] shrink-0"
                 >
-                    <h3 className="font-bold text-white text-sm">Game History</h3>
-                    <div className="flex gap-4 text-[#666] text-lg">
-                        <i className="far fa-square cursor-pointer hover:text-white transition-colors"></i>
-                        <i className="far fa-clock cursor-pointer hover:text-white transition-colors"></i>
-                        <i className="fas fa-download cursor-pointer hover:text-white transition-colors"></i>
-                    </div>
+                    <h3 className="font-bold text-white text-lg">Game History</h3>
                 </div>
                 
                 <div className="flex-1 overflow-hidden">
@@ -147,13 +158,23 @@ const HomePage = () => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-[#3c3a37]">
-                            {gameHistory.slice(0, 5).map((game) => {
+                            {isHistoryLoading && (
+                                <tr>
+                                    <td colSpan="6" className="px-4 py-8 text-center text-[#8b8987] font-bold">Loading games...</td>
+                                </tr>
+                            )}
+                            {!isHistoryLoading && gameHistory.length === 0 && (
+                                <tr>
+                                    <td colSpan="6" className="px-4 py-8 text-center text-[#8b8987] font-bold">No games yet</td>
+                                </tr>
+                            )}
+                            {!isHistoryLoading && gameHistory.slice(0, 5).map((game) => {
                                 const whiteWon = game.result === "1-0";
                                 const blackWon = game.result === "0-1";
                                 const isDraw = game.result === "1/2-1/2";
+                                const isOngoing = game.result === "*";
                                 
                                 // Pontos Ikon Logika a GameArchive alapján
-                                const gameType = game.type || (game.elo >= 3000 ? "bot" : "10 min");
 
                                 const whitePlayer = game.iWasWhite 
                                     ? { name: username || "Viki", elo: game.myElo, isMe: true } 
@@ -167,20 +188,7 @@ const HomePage = () => {
                                     <tr key={game.id} className="hover:bg-[#2b2926] transition-colors h-[70px] group">
                                         {/* KATEGÓRIA IKON (Tűpontos Archive másolat) */}
                                         <td className="px-4 py-2 text-center align-middle">
-                                            {gameType === 'bot' ? (
-                                                <div className="text-blue-300 text-2xl opacity-80">
-                                                    <i className="fas fa-robot"></i>
-                                                </div>
-                                            ) : (
-                                                <div className="flex flex-col items-center">
-                                                    <div className={`${gameType.includes('min') ? 'text-[#81b64c]' : 'text-yellow-500'} text-xl`}>
-                                                        <i className={`fas ${gameType.includes('min') ? 'fa-stopwatch' : 'fa-sun'}`}></i>
-                                                    </div>
-                                                    <div className="text-[9px] uppercase font-bold text-[#666] mt-1 whitespace-nowrap">
-                                                        {gameType}
-                                                    </div>
-                                                </div>
-                                            )}
+                                            <GameHistoryTypeIcon game={game} size={24} />
                                         </td>
 
                                         {/* Players */}
@@ -190,14 +198,14 @@ const HomePage = () => {
                                                     <div className={`w-3.5 h-3.5 bg-white rounded-sm ${whiteWon ? 'ring-2 ring-[#81b64c]' : ''}`}></div>
                                                     {whitePlayer.isMe && <span className="text-blue-400 text-[10px]"><i className="fas fa-gem"></i></span>}
                                                     <span className={`text-[14px] ${whitePlayer.isMe ? 'font-bold text-white' : 'text-[#bab9b8]'}`}>
-                                                        {whitePlayer.name} <span className="text-[#666] font-normal">({whitePlayer.elo})</span>
+                                                        {whitePlayer.name} <span className="text-[#666] font-normal">({whitePlayer.elo ?? '-'})</span>
                                                     </span>
                                                 </div>
                                                 <div className="flex items-center gap-2">
                                                     <div className={`w-3.5 h-3.5 bg-[#3c3a37] rounded-sm ${blackWon ? 'ring-2 ring-[#81b64c]' : ''}`}></div>
                                                     {blackPlayer.isMe && <span className="text-blue-400 text-[10px]"><i className="fas fa-gem"></i></span>}
                                                     <span className={`text-[14px] ${blackPlayer.isMe ? 'font-bold text-white' : 'text-[#bab9b8]'}`}>
-                                                        {blackPlayer.name} <span className="text-[#666] font-normal">({blackPlayer.elo})</span>
+                                                        {blackPlayer.name} <span className="text-[#666] font-normal">({blackPlayer.elo ?? '-'})</span>
                                                     </span>
                                                 </div>
                                             </div>
@@ -207,11 +215,11 @@ const HomePage = () => {
                                         <td className="px-4 py-2">
                                             <div className="flex items-center justify-center gap-3">
                                                 <div className="flex flex-col text-[14px] font-bold text-[#8b8987] leading-tight text-right w-4">
-                                                    <span className={whiteWon ? 'text-white' : ''}>{isDraw ? '½' : (whiteWon ? '1' : '0')}</span>
-                                                    <span className={blackWon ? 'text-white' : ''}>{isDraw ? '½' : (blackWon ? '1' : '0')}</span>
+                                                    <span className={whiteWon || isDraw ? 'text-white' : ''}>{isOngoing ? '-' : isDraw ? '1/2' : (whiteWon ? '1' : '0')}</span>
+                                                    <span className={blackWon || isDraw ? 'text-white' : ''}>{isOngoing ? '-' : isDraw ? '1/2' : (blackWon ? '1' : '0')}</span>
                                                 </div>
-                                                <div className={`w-6 h-6 flex items-center justify-center rounded-sm ${isDraw ? 'bg-[#3c3a37]' : (game.win ? 'bg-[#81b64c]' : 'bg-[#fa412d]')}`}>
-                                                    <i className={`fas ${isDraw ? 'fa-equals text-[8px]' : (game.win ? 'fa-plus' : 'fa-minus')} text-[10px] text-white`}></i>
+                                                <div className={`w-6 h-6 flex items-center justify-center rounded-sm ${isDraw || isOngoing ? 'bg-[#3c3a37]' : (game.win ? 'bg-[#81b64c]' : 'bg-[#fa412d]')}`}>
+                                                    <i className={`fas ${isDraw || isOngoing ? 'fa-equals text-[8px]' : (game.win ? 'fa-plus' : 'fa-minus')} text-[10px] text-white`}></i>
                                                 </div>
                                             </div>
                                         </td>
@@ -219,16 +227,16 @@ const HomePage = () => {
                                         {/* Accuracy */}
                                         <td className="px-4 py-2 text-center">
                                             <div className="flex flex-col text-[12px] font-bold leading-tight items-center">
-                                                <span className="text-[#8b8987]">{game.accuracy[0]}</span>
-                                                <span className="text-white">{game.accuracy[1]}</span>
+                                                <span className="text-[#8b8987]">{Array.isArray(game.accuracy) ? game.accuracy[0] : '-'}</span>
+                                                <span className="text-white">{Array.isArray(game.accuracy) ? game.accuracy[1] : '-'}</span>
                                             </div>
                                         </td>
 
                                         {/* Moves */}
-                                        <td className="px-4 py-2 text-center text-white font-bold text-[14px]">{game.moves}</td>
+                                        <td className="px-4 py-2 text-center text-white font-bold text-[14px]">{game.moves ?? '-'}</td>
 
                                         {/* Date */}
-                                        <td className="px-4 py-2 text-right text-[#bab9b8] text-[13px] whitespace-nowrap font-medium pr-6">{game.date}</td>
+                                        <td className="px-4 py-2 text-right text-[#bab9b8] text-[13px] whitespace-nowrap font-medium pr-6">{game.date || '-'}</td>
                                     </tr>
                                 );
                             })}
@@ -309,3 +317,4 @@ const MiniChessBoard = ({ fen }) => {
 
 
 export default HomePage;
+

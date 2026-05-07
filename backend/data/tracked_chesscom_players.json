@@ -1,12 +1,490 @@
 [
-  { "name": "Magnus Carlsen", "username": "magnuscarlsen" },
-  { "name": "Hikaru Nakamura", "username": "hikaru" },
-  { "name": "Fabiano Caruana", "username": "fabianocaruana" },
-  { "name": "Ian Nepomniachtchi", "username": "lachesisq" },
-  { "name": "Alireza Firouzja", "username": "firouzja2003" },
-  { "name": "Daniel Naroditsky", "username": "danielnaroditsky" },
-  { "name": "Levon Aronian", "username": "levonaronian" },
-  { "name": "Wesley So", "username": "gmwso" },
-  { "name": "Anish Giri", "username": "anishgiri" },
-  { "name": "Maxime Vachier-Lagrave", "username": "mvl" }
+  {
+    "name": "Magnus Carlsen",
+    "username": "magnuscarlsen"
+  },
+  {
+    "name": "Hikaru Nakamura",
+    "username": "hikaru"
+  },
+  {
+    "name": "Fabiano Caruana",
+    "username": "fabianocaruana"
+  },
+  {
+    "name": "Nodirbek Abdusattorov",
+    "username": "nodirbekabdusattorov"
+  },
+  {
+    "name": "Javokhir Sindarov",
+    "username": "javokhirsindarov"
+  },
+  {
+    "name": "Anish Giri",
+    "username": "anishgiri"
+  },
+  {
+    "name": "Vincent Keymer",
+    "username": "vincentkeymer"
+  },
+  {
+    "name": "Alireza Firouzja",
+    "username": "firouzja2003"
+  },
+  {
+    "name": "Wesley So",
+    "username": "gmwso"
+  },
+  {
+    "name": "Wei Yi",
+    "username": "weiyi"
+  },
+  {
+    "name": "Arjun Erigaisi",
+    "username": "arjun_erigaisi"
+  },
+  {
+    "name": "Jan-Krzysztof Duda",
+    "username": "polish_fighter3000"
+  },
+  {
+    "name": "Viswanathan Anand",
+    "username": "vishyanand"
+  },
+  {
+    "name": "Ding Liren",
+    "username": "dingliren"
+  },
+  {
+    "name": "Jorden van Foreest",
+    "username": "jordenvanforeest"
+  },
+  {
+    "name": "Praggnanandhaa Rameshbabu",
+    "username": "praggnanandhaa"
+  },
+  {
+    "name": "Gukesh Dommaraju",
+    "username": "gukeshdommaraju"
+  },
+  {
+    "name": "Leinier Dominguez Perez",
+    "username": "leinierdominguez"
+  },
+  {
+    "name": "Le Quang Liem",
+    "username": "lequangliem"
+  },
+  {
+    "name": "Richard Rapport",
+    "username": "richardrapport"
+  },
+  {
+    "name": "Ian Nepomniachtchi",
+    "username": "lachesisq"
+  },
+  {
+    "name": "Hans Niemann",
+    "username": "hansontwitch"
+  },
+  {
+    "name": "Levon Aronian",
+    "username": "levonaronian"
+  },
+  {
+    "name": "Nihal Sarin",
+    "username": "junglebook1"
+  },
+  {
+    "name": "Awonder Liang",
+    "username": "awonderliang"
+  },
+  {
+    "name": "Shakhriyar Mamedyarov",
+    "username": "shakhriyarmamedyarov"
+  },
+  {
+    "name": "Maxime Vachier-Lagrave",
+    "username": "mvl"
+  },
+  {
+    "name": "Amin Tabatabaei",
+    "username": "amintabatabaei"
+  },
+  {
+    "name": "Yu Yangyi",
+    "username": "yuyangyi"
+  },
+  {
+    "name": "Parham Maghsoodloo",
+    "username": "parhammaghsoodloo"
+  },
+  {
+    "name": "Dmitry Andreikin",
+    "username": "dmitryandreikin"
+  },
+  {
+    "name": "Yagiz Kaan Erdogmus",
+    "username": "yagizkaanerdogmus"
+  },
+  {
+    "name": "Vidit Gujrathi",
+    "username": "viditchess"
+  },
+  {
+    "name": "Vladimir Fedoseev",
+    "username": "vladimirfedoseev"
+  },
+  {
+    "name": "Sam Sevian",
+    "username": "samsevian"
+  },
+  {
+    "name": "Veselin Topalov",
+    "username": "veselintopalov"
+  },
+  {
+    "name": "Matthias Bluebaum",
+    "username": "matthiasbluebaum"
+  },
+  {
+    "name": "Aravindh Chithambaram",
+    "username": "aravindhchithambaram"
+  },
+  {
+    "name": "Nodirbek Yakubboev",
+    "username": "nodirbekyakubboev"
+  },
+  {
+    "name": "Teimour Radjabov",
+    "username": "teimourradjabov"
+  },
+  {
+    "name": "Andrey Esipenko",
+    "username": "andreyesipenko"
+  },
+  {
+    "name": "Wang Hao",
+    "username": "wanghao"
+  },
+  {
+    "name": "Peter Svidler",
+    "username": "petersvidler"
+  },
+  {
+    "name": "Harikrishna Pentala",
+    "username": "harikrishnapentala"
+  },
+  {
+    "name": "Peter Leko",
+    "username": "peterleko"
+  },
+  {
+    "name": "Pavel Eljanov",
+    "username": "paveleljanov"
+  },
+  {
+    "name": "Igor Kovalenko",
+    "username": "igorkovalenko"
+  },
+  {
+    "name": "Nikita Vitiugov",
+    "username": "nikitavitiugov"
+  },
+  {
+    "name": "Aydin Suleymanli",
+    "username": "aydinsuleymanli"
+  },
+  {
+    "name": "David Howell",
+    "username": "davidhowell"
+  },
+  {
+    "name": "Rustam Kasimdzhanov",
+    "username": "rustamkasimdzhanov"
+  },
+  {
+    "name": "Alexey Sarana",
+    "username": "alexeysarana"
+  },
+  {
+    "name": "Nils Grandelius",
+    "username": "nilsgrandelius"
+  },
+  {
+    "name": "Bu Xiangzhi",
+    "username": "buxiangzhi"
+  },
+  {
+    "name": "Pranav Venkatesh",
+    "username": "pranavvenkatesh"
+  },
+  {
+    "name": "Johan-Sebastian Christiansen",
+    "username": "johanchristiansen"
+  },
+  {
+    "name": "Ivan Saric",
+    "username": "ivansaric"
+  },
+  {
+    "name": "David Anton Guijarro",
+    "username": "davidantonguijarro"
+  },
+  {
+    "name": "Kirill Alekseenko",
+    "username": "kirillalekseenko"
+  },
+  {
+    "name": "Jeffery Xiong",
+    "username": "jefferyxiong"
+  },
+  {
+    "name": "Daniil Dubov",
+    "username": "daniildubov"
+  },
+  {
+    "name": "Ernesto Inarkiev",
+    "username": "ernesto_inarkiev"
+  },
+  {
+    "name": "Ray Robson",
+    "username": "rayrobson"
+  },
+  {
+    "name": "Alexander Morozevich",
+    "username": "alexandermorozevich"
+  },
+  {
+    "name": "Jose Eduardo Martinez Alcantara",
+    "username": "josealcantara"
+  },
+  {
+    "name": "Volodar Murzin",
+    "username": "volodarmurzin"
+  },
+  {
+    "name": "Bogdan-Daniel Deac",
+    "username": "bogdandanieldeac"
+  },
+  {
+    "name": "Radoslaw Wojtaszek",
+    "username": "radoslawwojtaszek"
+  },
+  {
+    "name": "Eltaj Safarli",
+    "username": "eltajsafarli"
+  },
+  {
+    "name": "Karthikeyan Murali",
+    "username": "karthikeyanmurali"
+  },
+  {
+    "name": "Sam Shankland",
+    "username": "samshankland"
+  },
+  {
+    "name": "Frederik Svane",
+    "username": "frederiksvane"
+  },
+  {
+    "name": "Alexander Donchenko",
+    "username": "alexanderdonchenko"
+  },
+  {
+    "name": "Maksim Chigaev",
+    "username": "maksimchigaev"
+  },
+  {
+    "name": "Shant Sargsyan",
+    "username": "shantsargsyan"
+  },
+  {
+    "name": "Francisco Vallejo Pons",
+    "username": "franciscopons"
+  },
+  {
+    "name": "Grigoriy Oparin",
+    "username": "grigoriyoparin"
+  },
+  {
+    "name": "Ediz Gurel",
+    "username": "edizgurel"
+  },
+  {
+    "name": "Aryan Tari",
+    "username": "aryantari"
+  },
+  {
+    "name": "Vladislav Artemiev",
+    "username": "vladislavartemiev"
+  },
+  {
+    "name": "Alexander Grischuk",
+    "username": "grischuk"
+  },
+  {
+    "name": "Saleh Salem",
+    "username": "salehsalem"
+  },
+  {
+    "name": "Gawain Maroroa Jones",
+    "username": "gawainjones"
+  },
+  {
+    "name": "Abhimanyu Mishra",
+    "username": "abhimanyu_mishra"
+  },
+  {
+    "name": "Raunak Sadhwani",
+    "username": "raunaksadhwani"
+  },
+  {
+    "name": "Ruslan Ponomariov",
+    "username": "ruslanponomariov"
+  },
+  {
+    "name": "Aryan Chopra",
+    "username": "aryanchopra"
+  },
+  {
+    "name": "Haik Martirosyan",
+    "username": "haikmartirosyan"
+  },
+  {
+    "name": "Rauf Mamedov",
+    "username": "raufmamedov"
+  },
+  {
+    "name": "Andy Woodward",
+    "username": "andywoodward"
+  },
+  {
+    "name": "Lu Shanglei",
+    "username": "lushanglei"
+  },
+  {
+    "name": "Nikolas Theodorou",
+    "username": "nikolastheodorou"
+  },
+  {
+    "name": "Aram Hakobyan",
+    "username": "aramhakobyan"
+  },
+  {
+    "name": "Boris Gelfand",
+    "username": "borisgelfand"
+  },
+  {
+    "name": "Vasyl Ivanchuk",
+    "username": "vasylivanchuk"
+  },
+  {
+    "name": "Thai Dai Van Nguyen",
+    "username": "thainguyen"
+  },
+  {
+    "name": "Pranesh M",
+    "username": "praneshm"
+  },
+  {
+    "name": "Robert Hovhannisyan",
+    "username": "roberthovhannisyan"
+  },
+  {
+    "name": "Michael Adams",
+    "username": "mickeyadams"
+  },
+  {
+    "name": "Konstantin Landa",
+    "username": "konstantinlanda"
+  },
+  {
+    "name": "Bassem Amin",
+    "username": "bassemamin"
+  },
+  {
+    "name": "Ivan Cheparinov",
+    "username": "ivancheparinov"
+  },
+  {
+    "name": "Jonas Buhl Bjerre",
+    "username": "jonasbuhlbjerre"
+  },
+  {
+    "name": "Etienne Bacrot",
+    "username": "etiennebacrot"
+  },
+  {
+    "name": "Aleksey Grebnev",
+    "username": "alekseygrebnev"
+  },
+  {
+    "name": "Loek van Wely",
+    "username": "loekvanwely"
+  },
+  {
+    "name": "Li Chao",
+    "username": "lichao"
+  },
+  {
+    "name": "David Navara",
+    "username": "davidnavara"
+  },
+  {
+    "name": "Andrei Volokitin",
+    "username": "andreivolokitin"
+  },
+  {
+    "name": "Wang Yue",
+    "username": "wangyue"
+  },
+  {
+    "name": "Denis Lazavik",
+    "username": "denislazavik"
+  },
+  {
+    "name": "Rasmus Svane",
+    "username": "rasmussvane"
+  },
+  {
+    "name": "Vladimir Malakhov",
+    "username": "vladimirmalakhov"
+  },
+  {
+    "name": "Aditya Mittal",
+    "username": "adityamittal"
+  },
+  {
+    "name": "Mikhail Al Antipov",
+    "username": "mikhailantipov"
+  },
+  {
+    "name": "Maxime Lagarde",
+    "username": "maximelagarde"
+  },
+  {
+    "name": "Alexandr Predke",
+    "username": "alexandrpredke"
+  },
+  {
+    "name": "Jaime Santos Latasa",
+    "username": "jaimesantoslatasa"
+  },
+  {
+    "name": "Peter Heine Nielsen",
+    "username": "peterheinenielsen"
+  },
+  {
+    "name": "Leon Luke Mendonca",
+    "username": "leonlukemendonca"
+  },
+  {
+    "name": "Szymon Gumularz",
+    "username": "szymon_gumularz"
+  },
+  {
+    "name": "Samvel Ter-Sahakyan",
+    "username": "samvelsahakyan"
+  }
 ]

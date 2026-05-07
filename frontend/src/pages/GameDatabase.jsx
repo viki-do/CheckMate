@@ -1,10 +1,29 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
+import { useNavigate, useParams } from 'react-router-dom';
+import DatabaseGameViewer from '../components/database/DatabaseGameViewer';
 import PlayerCatalogView from '../components/database/PlayerCatalogView';
 import PlayerProfileView from '../components/database/PlayerProfileView';
 import { API_BASE } from '../constants/databasePlayers';
 
+const DEFAULT_DETAIL_FILTERS = { opening: '', player2: '', fixedColors: false };
+
+const toPlayerSlug = (name) => String(name || '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase()
+  .replace(/[^a-z0-9]+/g, '-')
+  .replace(/^-+|-+$/g, '');
+
+const playerNameFromSlug = (slug) => String(slug || '')
+  .split('-')
+  .filter(Boolean)
+  .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+  .join(' ');
+
 const GameDatabase = () => {
+  const navigate = useNavigate();
+  const { playerSlug, gameId } = useParams();
   const token = localStorage.getItem('chessToken');
   const authHeaders = useMemo(() => (
     token ? { headers: { Authorization: `Bearer ${token}` } } : {}
@@ -28,7 +47,9 @@ const GameDatabase = () => {
   const [totalGames, setTotalGames] = useState(0);
   const [gamesPage, setGamesPage] = useState(1);
   const [gamesSort, setGamesSort] = useState('year_desc');
-  const [detailFilters, setDetailFilters] = useState({ opening: '', player2: '', fixedColors: false });
+  const [detailFilters, setDetailFilters] = useState(DEFAULT_DETAIL_FILTERS);
+  const [selectedReplayGame, setSelectedReplayGame] = useState(null);
+  const [isReplayLoading, setIsReplayLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isPlayersLoading, setIsPlayersLoading] = useState(false);
   const [isGamesLoading, setIsGamesLoading] = useState(false);
@@ -57,7 +78,7 @@ const GameDatabase = () => {
     }
   }, [authHeaders, playerSearch, sortMode]);
 
-  const fetchGamesForPlayer = useCallback(async (player, page = 1, filters = detailFilters, sort = gamesSort) => {
+  const fetchGamesForPlayer = useCallback(async (player, page = 1, filters = DEFAULT_DETAIL_FILTERS, sort = 'year_desc') => {
     if (!player?.name) return;
     setIsGamesLoading(true);
     try {
@@ -84,7 +105,21 @@ const GameDatabase = () => {
     } finally {
       setIsGamesLoading(false);
     }
-  }, [authHeaders, detailFilters, gamesSort]);
+  }, [authHeaders]);
+
+  const fetchGameById = useCallback(async (id) => {
+    setIsReplayLoading(true);
+    setNotice('');
+    try {
+      const res = await axios.get(`${API_BASE}/database/games/${id}`, authHeaders);
+      setSelectedReplayGame(res.data);
+    } catch {
+      setSelectedReplayGame(null);
+      setNotice('Could not load this game.');
+    } finally {
+      setIsReplayLoading(false);
+    }
+  }, [authHeaders]);
 
   useEffect(() => {
     let isMounted = true;
@@ -108,6 +143,27 @@ const GameDatabase = () => {
     load();
     return () => { isMounted = false; };
   }, [authHeaders]);
+
+  useEffect(() => {
+    if (gameId) {
+      fetchGameById(gameId);
+      return;
+    }
+
+    setSelectedReplayGame(null);
+
+    if (playerSlug) {
+      const player = { name: playerNameFromSlug(playerSlug) };
+      fetchGamesForPlayer(player);
+      return;
+    }
+
+    setSelectedPlayer(null);
+    setPlayerProfile(null);
+    setGames([]);
+    setTotalGames(0);
+    setGamesPage(1);
+  }, [gameId, playerSlug, fetchGameById, fetchGamesForPlayer]);
 
   const handleSearch = async (event) => {
     event.preventDefault();
@@ -141,14 +197,37 @@ const GameDatabase = () => {
   };
 
   const leaveDetail = () => {
+    navigate('/games');
     setSelectedPlayer(null);
     setPlayerProfile(null);
     setGames([]);
     setTotalGames(0);
     setGamesPage(1);
     setGamesSort('year_desc');
-    setDetailFilters({ opening: '', player2: '', fixedColors: false });
+    setDetailFilters(DEFAULT_DETAIL_FILTERS);
   };
+
+  const handleSelectPlayer = (player) => {
+    if (!player?.name) return;
+    navigate(`/games/${toPlayerSlug(player.name)}`);
+  };
+
+  const handleOpenGame = (game) => {
+    if (!game?.id) return;
+    navigate(`/games/view/${game.id}`);
+  };
+
+  if (gameId) {
+    if (isReplayLoading || !selectedReplayGame) {
+      return (
+        <div className="min-h-screen bg-[#1e1e1e] text-[#d7d6d4] flex items-center justify-center font-sans">
+          {notice || 'Loading game...'}
+        </div>
+      );
+    }
+
+    return <DatabaseGameViewer game={selectedReplayGame} />;
+  }
 
   if (selectedPlayer) {
     return (
@@ -166,6 +245,7 @@ const GameDatabase = () => {
         onDetailSearch={handleDetailSearch}
         onGamesSortChange={handleGamesSortChange}
         onGamesPageChange={goToGamesPage}
+        onOpenGame={handleOpenGame}
       />
     );
   }
@@ -186,7 +266,7 @@ const GameDatabase = () => {
       onSearch={handleSearch}
       onSortChange={handleSortChange}
       onPlayersPageChange={goToPlayersPage}
-      onSelectPlayer={fetchGamesForPlayer}
+      onSelectPlayer={handleSelectPlayer}
     />
   );
 };

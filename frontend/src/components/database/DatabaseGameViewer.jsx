@@ -104,17 +104,44 @@ const PlayerStrip = ({ name, rating, type, material, side }) => (
 const isEcoCode = (value) => /^[A-E][0-9]{2}$/i.test(String(value || '').trim());
 
 const getOpeningDisplay = (game) => {
+  const detectedName = String(game.detected_opening?.name || '').trim();
+  const detectedEco = String(game.detected_opening?.eco || '').trim();
   const opening = String(game.opening || '').trim();
   const eco = String(game.eco || '').trim();
+  const ecoCode = detectedEco || eco || (isEcoCode(opening) ? opening : '');
+
+  if (detectedName) {
+    return { title: detectedName, metaEco: ecoCode };
+  }
 
   if (opening && !isEcoCode(opening)) {
     return { title: opening, metaEco: eco && eco !== opening ? eco : '' };
   }
 
   return {
-    title: game.event || 'Unknown opening',
-    metaEco: eco || (isEcoCode(opening) ? opening : ''),
+    title: 'Unknown opening',
+    metaEco: ecoCode,
   };
+};
+
+const getResultTitle = (game) => {
+  if (game.result === '1-0') return 'White Won (1-0)';
+  if (game.result === '0-1') return 'Black Won (0-1)';
+  if (game.result === '1/2-1/2' || game.result === '1/2' || game.result === '½-½') {
+    return `Draw (${game.result})`;
+  }
+  return game.result ? `Result: ${game.result}` : 'Result Unknown';
+};
+
+const InfoLine = ({ label, value }) => {
+  if (!value && value !== 0) return null;
+
+  return (
+    <div className="text-[#d7d6d4] text-base leading-7">
+      <span className="font-bold text-white">{label}: </span>
+      <span>{value}</span>
+    </div>
+  );
 };
 
 const DatabaseGameViewer = ({ game }) => {
@@ -122,6 +149,7 @@ const DatabaseGameViewer = ({ game }) => {
   const { playSound } = useChess();
   const replay = useMemo(() => buildReplay(game), [game]);
   const [moveIndex, setMoveIndex] = useState(replay.history.length);
+  const [activeTab, setActiveTab] = useState('moves');
   const fen = replay.fens[moveIndex] || DEFAULT_FEN;
   const lastMove = moveIndex > 0 ? replay.history[moveIndex - 1] : null;
   const moveRows = formatMoveRows(replay.history);
@@ -155,17 +183,7 @@ const DatabaseGameViewer = ({ game }) => {
   };
 
   const goToAnalysis = () => {
-    const latest = replay.history[moveIndex - 1] || replay.history[replay.history.length - 1];
-    localStorage.setItem('chess_analysis_cache', JSON.stringify({
-      fen,
-      history: replay.history,
-      lastMove: latest ? { from: latest.from, to: latest.to } : { from: null, to: null },
-      opening,
-      startingFen: DEFAULT_FEN,
-      initialAnalysis: null,
-      panelNotice: '',
-    }));
-    navigate('/analysis');
+    navigate(`/analysis/game/master/${game.id}/review`);
   };
 
   const playReplaySound = (nextIndex) => {
@@ -232,37 +250,78 @@ const DatabaseGameViewer = ({ game }) => {
 
       <aside className="w-112.5 shrink-0 h-170 self-center bg-[#262421] flex flex-col font-sans border border-[#3c3a37] rounded-xl overflow-hidden shadow-2xl">
         <div className="grid grid-cols-2 border-b border-[#373430] bg-[#1f1d1a]">
-          <div className="py-4 text-center text-white font-black border-b-4 border-white">Moves</div>
-          <div className="py-4 text-center text-[#bab9b8] font-black">Info</div>
+          <button
+            type="button"
+            onClick={() => setActiveTab('moves')}
+            className={`py-4 text-center font-black border-b-4 ${
+              activeTab === 'moves' ? 'text-white border-white' : 'text-[#bab9b8] border-transparent'
+            }`}
+          >
+            Moves
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('info')}
+            className={`py-4 text-center font-black border-b-4 ${
+              activeTab === 'info' ? 'text-white border-white' : 'text-[#bab9b8] border-transparent'
+            }`}
+          >
+            Info
+          </button>
         </div>
 
-        <div className="px-5 py-3 border-b border-[#373430] text-[#d7d6d4]">
-          <div className="font-bold">{openingDisplay.title}</div>
-          <div className="text-sm text-[#8b8987] mt-1">
-            {[openingDisplay.metaEco, game.date].filter(Boolean).join(' - ') || 'Game database'}
-          </div>
-          {replay.parseError && <div className="text-sm text-[#f87171] mt-1">Could not parse moves</div>}
-        </div>
-
-        <div className="flex-1 overflow-y-auto no-scrollbar bg-[#262421]">
-          {moveRows.map((row) => (
-            <div key={row.moveNumber} className="grid grid-cols-[48px_1fr_1fr] px-5 py-2 odd:bg-[#2b2926] text-[#bab9b8] font-bold">
-              <div>{row.moveNumber}.</div>
-              <button
-                onClick={() => goToReplayMove(row.white.num + 1)}
-                className={`text-left hover:text-white flex items-center ${moveIndex === row.white.num + 1 ? 'text-white' : ''}`}
-              >
-                <MoveNotation move={row.white} isBlack={false} />
-              </button>
-              <button
-                onClick={() => row.black && goToReplayMove(row.black.num + 1)}
-                className={`text-left hover:text-white flex items-center ${row.black && moveIndex === row.black.num + 1 ? 'text-white' : ''}`}
-              >
-                {row.black ? <MoveNotation move={row.black} isBlack /> : ''}
-              </button>
+        {activeTab === 'moves' ? (
+          <>
+            <div className="px-5 py-3 border-b border-[#373430] text-[#d7d6d4]">
+              <div className="font-bold">{openingDisplay.title}</div>
+              <div className="text-sm text-[#8b8987] mt-1">
+                {[openingDisplay.metaEco, game.date].filter(Boolean).join(' - ') || 'Game database'}
+              </div>
+              {replay.parseError && <div className="text-sm text-[#f87171] mt-1">Could not parse moves</div>}
             </div>
-          ))}
-        </div>
+
+            <div className="flex-1 overflow-y-auto no-scrollbar bg-[#262421]">
+              {moveRows.map((row) => (
+                <div key={row.moveNumber} className="grid grid-cols-[48px_1fr_1fr] px-5 py-2 odd:bg-[#2b2926] text-[#bab9b8] font-bold">
+                  <div>{row.moveNumber}.</div>
+                  <button
+                    onClick={() => goToReplayMove(row.white.num + 1)}
+                    className={`text-left hover:text-white flex items-center ${moveIndex === row.white.num + 1 ? 'text-white' : ''}`}
+                  >
+                    <MoveNotation move={row.white} isBlack={false} />
+                  </button>
+                  <button
+                    onClick={() => row.black && goToReplayMove(row.black.num + 1)}
+                    className={`text-left hover:text-white flex items-center ${row.black && moveIndex === row.black.num + 1 ? 'text-white' : ''}`}
+                  >
+                    {row.black ? <MoveNotation move={row.black} isBlack /> : ''}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <div className="flex-1 overflow-y-auto no-scrollbar bg-[#262421] px-5 py-5">
+            <div className="bg-[#f2f2f2] text-[#5b5b5b] text-center font-black text-xl py-3 rounded-sm mb-5">
+              {getResultTitle(game)}
+            </div>
+
+            <div className="space-y-1">
+              <InfoLine label="Date" value={game.date} />
+              <InfoLine label="Result" value={game.result} />
+              <InfoLine label="Event" value={game.event} />
+              <InfoLine label="Site" value={game.site} />
+              <InfoLine label="Round" value={game.round} />
+              <InfoLine label="White" value={game.white} />
+              <InfoLine label="White Elo" value={game.white_elo} />
+              <InfoLine label="Black" value={game.black} />
+              <InfoLine label="Black Elo" value={game.black_elo} />
+              <InfoLine label="Opening" value={openingDisplay.title} />
+              <InfoLine label="ECO" value={openingDisplay.metaEco || game.eco} />
+              <InfoLine label="Moves" value={game.ply_count ? Math.ceil(game.ply_count / 2) : null} />
+            </div>
+          </div>
+        )}
 
         <div className="p-2 bg-[#21201d] rounded-b-lg border-t border-[#3c3a37] shrink-0">
           <div className="flex justify-between gap-1 px-1 h-12">

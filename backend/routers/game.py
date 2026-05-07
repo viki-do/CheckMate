@@ -669,7 +669,13 @@ def get_game_over_details(b: chess.Board):
 
 @router.post("/move")
 async def make_move(request: Request, data: dict, user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
-    game_uuid = uuid.UUID(data.get("game_id"))
+    game_id = data.get("game_id")
+    if not game_id or game_id == "null":
+        raise HTTPException(status_code=400, detail="Missing game_id")
+    try:
+        game_uuid = uuid.UUID(str(game_id))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Invalid game_id")
     move_uci = data.get("move")
     is_timeout = data.get("timeout", False)
     is_resignation = data.get("resigned", False)
@@ -737,7 +743,23 @@ async def make_move(request: Request, data: dict, user_id: str = Depends(get_cur
                 raise HTTPException(status_code=400, detail="Invalid move format")
 
         if user_move not in board.legal_moves:
-            raise HTTPException(status_code=400, detail="Illegal move")
+            legal_from_square = []
+            try:
+                legal_from_square = [
+                    move.uci()
+                    for move in board.legal_moves
+                    if move.from_square == user_move.from_square
+                ]
+            except Exception:
+                pass
+            raise HTTPException(status_code=400, detail={
+                "error": "Illegal move",
+                "move": move_uci,
+                "fen": board.fen(),
+                "turn": "white" if board.turn == chess.WHITE else "black",
+                "in_check": board.is_check(),
+                "legal_from_square": legal_from_square,
+            })
 
         fen_elotte = board.fen()
         user_move_san = board.san(user_move)
@@ -1105,6 +1127,77 @@ def get_user_games(username: str, offset: int = 0, limit: int = 10, db: Session 
         .all()
     
     total_count = db.query(models.Game).filter((models.Game.white_player_id == user.id) | (models.Game.black_player_id == user.id)).count()
-    
-    return {"games": games, "total": total_count}
+
+    def bot_display_name(game):
+        bot_id = (game.bot_id or "engine").replace("_", " ").replace("-", " ").strip()
+        if not bot_id:
+            return "Engine"
+        known_names = {
+            "beginner stockfish": "Stockfish",
+            "intermediate stockfish": "Stockfish",
+            "advanced stockfish": "Stockfish",
+            "master stockfish": "Stockfish",
+        }
+        return known_names.get(bot_id.lower(), bot_id.title())
+
+    def format_game_date(value):
+        if not value:
+            return None
+        return value.strftime("%b %-d, %Y") if os.name != "nt" else value.strftime("%b %#d, %Y")
+
+    def result_for_game(game, move_count, board):
+        if game.status == models.GameStatus.draw:
+            return "1/2-1/2"
+        if game.status in {models.GameStatus.ongoing, models.GameStatus.aborted} or move_count == 0:
+            return "*"
+
+        winner_is_white = board.turn == chess.BLACK
+        if game.status == models.GameStatus.resigned:
+            winner_is_white = str(game.player_color).lower() == "black"
+        elif game.status == models.GameStatus.finished:
+            winner_is_white = board.turn == chess.BLACK
+
+        return "1-0" if winner_is_white else "0-1"
+
+    serialized_games = []
+    for game in games:
+        moves = db.query(models.Move)\
+            .filter(models.Move.game_id == game.id, models.Move.notation != "start")\
+            .order_by(models.Move.move_number.asc())\
+            .all()
+        board = chess.Board()
+        for move in moves:
+            try:
+                board.push_san(move.notation)
+            except Exception:
+                try:
+                    board.push_uci(move.notation)
+                except Exception:
+                    continue
+
+        i_was_white = str(game.player_color).lower() != "black"
+        result = result_for_game(game, len(moves), board)
+        user_won = (i_was_white and result == "1-0") or ((not i_was_white) and result == "0-1")
+        time_label = "bot"
+        if game.base_time_sec and game.base_time_sec > 0:
+            minutes = max(1, round(game.base_time_sec / 60))
+            time_label = f"{minutes} min"
+
+        serialized_games.append({
+            "id": str(game.id),
+            "type": time_label,
+            "isBot": bool(game.bot_id),
+            "opponent": bot_display_name(game),
+            "elo": game.bot_elo,
+            "myElo": None,
+            "result": result,
+            "accuracy": None,
+            "moves": (len(moves) + 1) // 2,
+            "date": format_game_date(game.created_at),
+            "win": user_won,
+            "iWasWhite": i_was_white,
+            "status": game.status.value if game.status else "ongoing",
+        })
+
+    return {"games": serialized_games, "total": total_count}
 

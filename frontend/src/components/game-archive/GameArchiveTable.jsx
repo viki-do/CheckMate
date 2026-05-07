@@ -1,6 +1,6 @@
 import GameArchiveRow from './GameArchiveRow';
 
-const GameArchiveTable = ({ games }) => (
+const GameArchiveTable = ({ games, username, isLoading }) => (
     <div className="bg-[#262421] border border-[#3c3a37] overflow-hidden rounded-b-lg">
         <table className="w-full text-left text-sm border-collapse">
             <thead className="bg-[#1e1e1e] text-[#8b8987] font-bold uppercase text-[10px] tracking-wider">
@@ -15,8 +15,18 @@ const GameArchiveTable = ({ games }) => (
                 </tr>
             </thead>
             <tbody className="divide-y divide-[#3c3a37]">
-                {games.map((game) => (
-                    <GameArchiveRow key={game.id} game={game} />
+                {isLoading && (
+                    <tr>
+                        <td colSpan="7" className="px-4 py-8 text-center text-[#8b8987] font-bold">Loading games...</td>
+                    </tr>
+                )}
+                {!isLoading && games.length === 0 && (
+                    <tr>
+                        <td colSpan="7" className="px-4 py-8 text-center text-[#8b8987] font-bold">No games yet</td>
+                    </tr>
+                )}
+                {!isLoading && games.map((game) => (
+                    <GameArchiveRow key={game.id} game={game} username={username} />
                 ))}
             </tbody>
         </table>

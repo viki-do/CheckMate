@@ -11,7 +11,7 @@ const ChessBoardGrid = ({ gameLogic, onMouseDown, onMouseUp, onDrop }) => {
     const boardRef = useRef(null); // Ref a táblához a passzív eseménykezelő fixhez
 
     const {
-        fen, selectedSquare, lastMove, validMoves, isDragging,
+        fen, selectedSquare, lastMove, validMoves, premoves = [], isDragging,
         hoverSquare, mousePos, isAlert, status,
         viewIndex, getSquareName, isFlipped, handleMouseUp
     } = gameLogic;
@@ -69,6 +69,7 @@ const ChessBoardGrid = ({ gameLogic, onMouseDown, onMouseUp, onDrop }) => {
             const piece = fullBoard[i] ? fullBoard[i][j] : null;
             const isSelected = selectedSquare === sqName;
             const isLast = lastMove.from === sqName || lastMove.to === sqName;
+            const isPremove = premoves.some(move => move.from === sqName || move.to === sqName);
             const isValid = validMoves.includes(sqName);
 
             const hoverOutlineColor = sqName === selectedSquare
@@ -84,6 +85,10 @@ const ChessBoardGrid = ({ gameLogic, onMouseDown, onMouseUp, onDrop }) => {
             } else if (isSelected || isLast) {
                 currentBgColor = isDark ? 'bg-[#b9cb43]' : 'bg-[#f5f681]';
             }
+
+            const bgStyle = isPremove
+                ? { backgroundColor: isDark ? '#B35F42' : '#EF8B81' }
+                : undefined;
 
             if (isDragging && selectedSquare === sqName && piece) {
                 draggedPieceData = { piece, i, j };
@@ -108,6 +113,7 @@ const ChessBoardGrid = ({ gameLogic, onMouseDown, onMouseUp, onDrop }) => {
                     }}
                     className={`w-21.25 h-21.25 flex justify-center items-center relative select-none transition-colors duration-150 ${currentBgColor} ${piece && status === "ongoing" && viewIndex === -1 ? 'cursor-grab' : 'cursor-default'}`}
                     style={{
+                        ...bgStyle,
                         outlineWidth: '3px',
                         outlineStyle: isHoverActive ? 'solid' : 'none',
                         outlineColor: hoverOutlineColor,

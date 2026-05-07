@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import OAuth2PasswordBearer
 from fastapi.responses import RedirectResponse
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
 from pydantic import BaseModel
@@ -72,6 +73,13 @@ class UserLogin(BaseModel):
     username: str
     password: str
 
+class UserProfileUpdate(BaseModel):
+    username: str | None = None
+    bio: str | None = None
+    about_me: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+
 # --- ÚTVONALAK ---
 
 @router.post("/register")
@@ -138,4 +146,50 @@ async def auth_github(request: Request, db: Session = Depends(get_db)):
 def get_profile(user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.id == uuid.UUID(user_id)).first()
     if not user: raise HTTPException(status_code=404, detail="Nem található")
-    return {"username": user.username, "email": user.email, "provider": user.provider}
+    return {
+        "username": user.username,
+        "email": user.email,
+        "provider": user.provider,
+        "bio": user.bio or "",
+        "about_me": user.about_me or "",
+        "first_name": user.first_name or "",
+        "last_name": user.last_name or "",
+    }
+
+@router.put("/profile")
+def update_profile(data: UserProfileUpdate, user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.id == uuid.UUID(user_id)).first()
+    if not user: raise HTTPException(status_code=404, detail="Nem talÃ¡lhatÃ³")
+
+    if data.username is not None:
+        next_username = data.username.strip()
+        if not next_username:
+            raise HTTPException(status_code=400, detail="Username is required")
+        existing_user = (
+            db.query(models.User)
+            .filter(func.lower(models.User.username) == next_username.lower(), models.User.id != user.id)
+            .first()
+        )
+        if existing_user:
+            raise HTTPException(status_code=409, detail="Username is already taken")
+        user.username = next_username[:50]
+    if data.bio is not None:
+        user.bio = data.bio[:50]
+    if data.about_me is not None:
+        user.about_me = data.about_me
+    if data.first_name is not None:
+        user.first_name = data.first_name.strip()[:100]
+    if data.last_name is not None:
+        user.last_name = data.last_name.strip()[:100]
+
+    db.commit()
+    db.refresh(user)
+    return {
+        "username": user.username,
+        "email": user.email,
+        "provider": user.provider,
+        "bio": user.bio or "",
+        "about_me": user.about_me or "",
+        "first_name": user.first_name or "",
+        "last_name": user.last_name or "",
+    }

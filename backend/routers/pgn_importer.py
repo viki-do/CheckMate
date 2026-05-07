@@ -161,6 +161,12 @@ def build_imported_game(game, pgn_object_key=None):
     )
 
 
+def is_allowed_imported_game(game, allowed_player_names=None):
+    if not allowed_player_names:
+        return True
+    return game.white in allowed_player_names and game.black in allowed_player_names
+
+
 def save_batch(db, batch, retries=3):
     for attempt in range(1, retries + 1):
         try:
@@ -195,7 +201,7 @@ def remove_existing_site_duplicates(db, batch):
     return clean_batch, duplicates
 
 
-def import_pgn_stream(file_obj, db, pgn_object_key=None, batch_size=100, dedupe_by_site=False):
+def import_pgn_stream(file_obj, db, pgn_object_key=None, batch_size=100, dedupe_by_site=False, allowed_player_names=None):
     imported = 0
     skipped = 0
     duplicates = 0
@@ -220,6 +226,9 @@ def import_pgn_stream(file_obj, db, pgn_object_key=None, batch_size=100, dedupe_
                     seen_sites.add(identity)
             imported_game = build_imported_game(game, pgn_object_key=pgn_object_key)
             if not imported_game.ply_count:
+                skipped += 1
+                continue
+            if not is_allowed_imported_game(imported_game, allowed_player_names):
                 skipped += 1
                 continue
             batch.append(imported_game)
@@ -250,7 +259,7 @@ def import_pgn_stream(file_obj, db, pgn_object_key=None, batch_size=100, dedupe_
     return {"imported": imported, "skipped": skipped, "duplicates": duplicates}
 
 
-def import_pgn_path(path, db, pgn_object_key=None, batch_size=100, dedupe_by_site=False):
+def import_pgn_path(path, db, pgn_object_key=None, batch_size=100, dedupe_by_site=False, allowed_player_names=None):
     with open(path, "rb") as file_obj:
         return import_pgn_stream(
             file_obj,
@@ -258,4 +267,5 @@ def import_pgn_path(path, db, pgn_object_key=None, batch_size=100, dedupe_by_sit
             pgn_object_key=pgn_object_key,
             batch_size=batch_size,
             dedupe_by_site=dedupe_by_site,
+            allowed_player_names=allowed_player_names,
         )

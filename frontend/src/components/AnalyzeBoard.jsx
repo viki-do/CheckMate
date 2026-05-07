@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Chess } from 'chess.js';
 import axios from 'axios';
+import { useParams } from 'react-router-dom';
 import AnalysisPanel from './AnalysisPanel';
 import { useChess } from '../context/ChessContext';
 import SetUpPositionView from './component_helpers/SetUpPositionView';
 import { AnimatePresence } from 'framer-motion';
+import MasterReviewIntro from './analysis-panel/MasterReviewIntro';
 import { getCapturedPieces, getMaterialDiff } from './materialUtils';
 import AnalyzeBoardSection from './analyze-board/AnalyzeBoardSection';
 import AnalyzeEvalBar from './analyze-board/AnalyzeEvalBar';
@@ -17,7 +19,45 @@ import {
     getSandboxGameState,
 } from './analyze-board/analyzeBoardUtils';
 
+const parseMasterGameHistory = (game) => {
+    let chess = new Chess();
+    try {
+        chess.loadPgn(`${game?.moves || ''} ${game?.result || '*'}`.trim());
+    } catch {
+        chess = new Chess();
+        const tokens = String(game?.moves || '')
+            .replace(/\{[^}]*\}/g, ' ')
+            .replace(/\([^)]*\)/g, ' ')
+            .replace(/\$\d+/g, ' ')
+            .replace(/\d+\.(\.\.)?/g, ' ')
+            .replace(/\b(1-0|0-1|1\/2-1\/2|\*)\b/g, ' ')
+            .split(/\s+/)
+            .map((token) => token.trim().replace(/[!?]+$/g, ''))
+            .filter(Boolean);
+
+        tokens.forEach((token) => chess.move(token));
+    }
+
+    const replay = new Chess(DEFAULT_FEN);
+    return chess.history({ verbose: true }).map((move, index) => {
+        const fenBefore = replay.fen();
+        const replayMove = replay.move(move.san);
+        return {
+            num: index,
+            m: replayMove.san,
+            from: replayMove.from,
+            to: replayMove.to,
+            fen: replay.fen(),
+            fen_before: fenBefore,
+            color: replayMove.color,
+            analysisLabel: null,
+        };
+    });
+};
+
 const AnalyzeBoard = () => {
+    const { gameId: masterReviewGameId } = useParams();
+    const isMasterReviewRoute = Boolean(masterReviewGameId);
     const chessContext = useChess();
     // --- ÁLLAPOTOK ---
     const [sandboxFen, setSandboxFen] = useState(DEFAULT_FEN);
@@ -29,7 +69,7 @@ const AnalyzeBoard = () => {
     const [viewIndex, setViewIndex] = useState(-1);
     const [openingName, setOpeningName] = useState("");
     const [isFlipped] = useState(false);
-    const [, setIsAnalyzing] = useState(false);
+    const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
     const [isNewModalOpen, setIsNewModalOpen] = useState(false);
     const [pendingPromotion, setPendingPromotion] = useState(null);
@@ -40,6 +80,8 @@ const AnalyzeBoard = () => {
     const [sandboxStatusReason, setSandboxStatusReason] = useState('');
     const [panelNotice, setPanelNotice] = useState('');
     const [selectedSetupPiece, setSelectedSetupPiece] = useState(null); // 'P', 'k', stb.
+    const [masterReviewGame, setMasterReviewGame] = useState(null);
+    const [masterReviewStarted, setMasterReviewStarted] = useState(false);
     
 
     const {
@@ -52,6 +94,7 @@ const AnalyzeBoard = () => {
     // --- PERSISTENCE ---
     
     useEffect(() => {
+    if (isMasterReviewRoute) return;
     const saved = localStorage.getItem('chess_analysis_cache');
     if (saved) {
         try {
@@ -76,9 +119,50 @@ const AnalyzeBoard = () => {
             console.error("Hiba a cache betöltésekor:", e);
         }
     }
-}, []); 
+}, [isMasterReviewRoute]); 
 
     useEffect(() => {
+        if (!isMasterReviewRoute || !masterReviewGameId || !API_BASE) return;
+
+        let isMounted = true;
+        const loadMasterGame = async () => {
+            setIsAnalyzing(true);
+            setPanelNotice('');
+            setMasterReviewStarted(false);
+            try {
+                const res = await axios.get(`${API_BASE}/database/games/${masterReviewGameId}`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                if (!isMounted) return;
+
+                const game = res.data;
+                const parsedHistory = parseMasterGameHistory(game);
+                const latest = parsedHistory[parsedHistory.length - 1];
+                const detectedOpening = game.detected_opening?.name || game.opening || '';
+
+                setMasterReviewGame(game);
+                setSandboxStartingFen(DEFAULT_FEN);
+                setSandboxHistory(parsedHistory);
+                setSandboxFen(latest?.fen || DEFAULT_FEN);
+                setSandboxLastMove(latest ? { from: latest.from, to: latest.to } : { from: null, to: null });
+                setViewIndex(-1);
+                setOpeningName(detectedOpening);
+                setInitialAnalysis(null);
+                setRightPanelMode('analysis');
+            } catch (err) {
+                console.error("Master review game load failed:", err);
+                if (isMounted) setPanelNotice('Could not load this master game.');
+            } finally {
+                if (isMounted) setIsAnalyzing(false);
+            }
+        };
+
+        loadMasterGame();
+        return () => { isMounted = false; };
+    }, [isMasterReviewRoute, masterReviewGameId, API_BASE, token]);
+
+    useEffect(() => {
+        if (isMasterReviewRoute) return;
         const cache = { 
             fen: sandboxFen, 
             history: sandboxHistory, 
@@ -89,7 +173,7 @@ const AnalyzeBoard = () => {
             panelNotice
         };
         localStorage.setItem('chess_analysis_cache', JSON.stringify(cache));
-    }, [sandboxFen, sandboxHistory, sandboxLastMove, openingName, sandboxStartingFen, initialAnalysis, panelNotice]);
+    }, [isMasterReviewRoute, sandboxFen, sandboxHistory, sandboxLastMove, openingName, sandboxStartingFen, initialAnalysis, panelNotice]);
 
     useEffect(() => {
         const { status, reason } = getSandboxGameState(sandboxFen);
@@ -273,6 +357,7 @@ const handleFullReview = async () => {
             if (res.data.analysis[0]?.opening) {
                 setOpeningName(res.data.analysis[0].opening);
             }
+            setMasterReviewStarted(true);
 
             console.log("--- DEBUG: Full Review Sikeresen Befejeződött ---");
         } else {
@@ -592,6 +677,14 @@ const handleExternalDrop = (e, row, col) => {
                 }
             }}
 
+            />
+            ) : isMasterReviewRoute && masterReviewGame && !masterReviewStarted ? (
+            <MasterReviewIntro
+                game={masterReviewGame}
+                history={sandboxHistory}
+                isReviewing={isAnalyzing}
+                reviewStarted={masterReviewStarted}
+                onStartReview={handleFullReview}
             />
             ) : (
             <AnalysisPanel 

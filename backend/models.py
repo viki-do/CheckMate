@@ -29,6 +29,10 @@ class User(Base):
     email = Column(String(255), unique=True, nullable=False)
     password_hash = Column(Text, nullable=True) 
     provider = Column(String(20), default="local") 
+    bio = Column(String(50), nullable=True)
+    about_me = Column(Text, nullable=True)
+    first_name = Column(String(100), nullable=True)
+    last_name = Column(String(100), nullable=True)
     
 class Game(Base):
     __tablename__ = "games"

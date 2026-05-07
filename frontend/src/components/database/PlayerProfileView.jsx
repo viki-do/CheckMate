@@ -11,7 +11,6 @@ import {
   Loader2,
   X,
 } from 'lucide-react';
-import DatabaseGameViewer from './DatabaseGameViewer';
 import DetailGameRow from './DetailGameRow';
 import ResultBar from './ResultBar';
 import SearchBox from './SearchBox';
@@ -32,9 +31,9 @@ const PlayerProfileView = ({
   onDetailSearch,
   onGamesSortChange,
   onGamesPageChange,
+  onOpenGame,
 }) => {
   const [isSortOpen, setIsSortOpen] = useState(false);
-  const [selectedReplayGame, setSelectedReplayGame] = useState(null);
   const facts = getPlayerFacts(selectedPlayer.name);
   const profile = playerProfile || {
     games: selectedPlayer.games,
@@ -59,17 +58,6 @@ const PlayerProfileView = ({
     setIsSortOpen(false);
     onGamesSortChange(nextSort);
   };
-
-  if (selectedReplayGame) {
-    return (
-      <div className="min-h-screen bg-[#1e1e1e] text-[#d7d6d4] font-sans">
-        <DatabaseGameViewer
-          game={selectedReplayGame}
-          onBack={() => setSelectedReplayGame(null)}
-        />
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-[#302e2b] text-[#d7d6d4] p-4 md:p-8 font-sans">
@@ -217,7 +205,7 @@ const PlayerProfileView = ({
                   <DetailGameRow
                     key={game.id}
                     game={game}
-                    onOpenGame={setSelectedReplayGame}
+                    onOpenGame={onOpenGame}
                   />
                 ))
               ) : (

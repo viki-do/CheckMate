@@ -1,9 +1,9 @@
 import ProfileGameRow from './ProfileGameRow';
 
-const ProfileGameHistory = ({ history, username, archiveMode, onSeeMore }) => (
+const ProfileGameHistory = ({ history, total, isLoading, username, archiveMode, onSeeMore }) => (
     <div className="flex-1 bg-[#262421] rounded-lg border border-[#3c3a37] overflow-hidden flex flex-col">
         <div className="p-4 border-b border-[#3c3a37] bg-[#2b2926] flex justify-between items-center text-white">
-            <h3 className="font-bold text-lg">Game History ({history.length})</h3>
+            <h3 className="font-bold text-lg">Game History ({total ?? history.length})</h3>
             <div className="flex gap-4 text-[#666]">
                 <i className="far fa-square cursor-pointer hover:text-white transition-colors"></i>
                 <i className="far fa-clock cursor-pointer hover:text-white transition-colors"></i>
@@ -24,7 +24,17 @@ const ProfileGameHistory = ({ history, username, archiveMode, onSeeMore }) => (
                 </tr>
             </thead>
             <tbody className="divide-y divide-[#3c3a37]">
-                {history.map((game, index) => (
+                {isLoading && (
+                    <tr>
+                        <td colSpan="7" className="px-4 py-8 text-center text-[#8b8987] font-bold">Loading games...</td>
+                    </tr>
+                )}
+                {!isLoading && history.length === 0 && (
+                    <tr>
+                        <td colSpan="7" className="px-4 py-8 text-center text-[#8b8987] font-bold">No games yet</td>
+                    </tr>
+                )}
+                {!isLoading && history.map((game, index) => (
                     <ProfileGameRow key={`${game.id}-${index}`} game={game} username={username} />
                 ))}
             </tbody>

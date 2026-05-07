@@ -215,8 +215,8 @@ const Navbar = () => {
                     onClick={() => navigate(`/member/${username}`)}
                     className={`min-w-0 flex-1 flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-all ${location.pathname.startsWith('/member') ? 'bg-[#312e2b] text-white' : 'text-[#bab9b8] hover:bg-[#312e2b] hover:text-white'}`}
                 >
-                    <div className="w-6 h-6 bg-[#454241] rounded flex justify-center items-center overflow-hidden">
-                        <ImageIcon src="/assets/pieces/white_king.png" alt="Profile" className="w-4 h-4" />
+                    <div className="w-6 h-6 rounded flex justify-center items-center overflow-hidden">
+                        <ImageIcon src="/assets/icons/noavatar.gif" alt="Profile" className="w-6 h-6" />
                     </div>
                     <span className="text-sm font-semibold truncate">{username}</span>
                 </div>

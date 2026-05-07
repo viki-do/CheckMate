@@ -1,7 +1,7 @@
-const TimeGroup = ({ label, icon, color, times, current, onSelect }) => (
+const TimeGroup = ({ label, icon, Icon, color, times, current, onSelect }) => (
     <div className="mb-4">
         <div className="flex items-center gap-2 mb-2 text-[#989795] text-[11px] font-black uppercase tracking-widest">
-            <i className={`fas ${icon} ${color}`}></i> {label}
+            {Icon ? <Icon size={16} className={color} /> : <i className={`fas ${icon} ${color}`}></i>} {label}
         </div>
         <div className="grid grid-cols-3 gap-2">
             {times.map(t => (

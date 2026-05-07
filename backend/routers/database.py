@@ -1,10 +1,16 @@
+import io
+import json
+import re
+from pathlib import Path
+
+import chess.pgn
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy import func, or_, text
 from sqlalchemy.orm import Session
 
 import models
 from database import SessionLocal
-from services.historical_players import HISTORICAL_PLAYERS
+from services.historical_players import HISTORICAL_PLAYERS, normalize_for_match, normalize_player_name
 from .auth import get_current_user_id
 from .pgn_importer import import_pgn_stream
 from .r2_storage import build_pgn_object_key, get_r2_prefix_stats, upload_fileobj_to_r2
@@ -25,6 +31,7 @@ BEST_PLAYERS_OF_ALL_TIME = [
 ]
 
 CATALOG_PLAYERS = [player["name"] for player in HISTORICAL_PLAYERS]
+OPENING_BOOK = None
 
 
 def get_db():
@@ -36,19 +43,21 @@ def get_db():
 
 
 def serialize_game(game):
+    detected_opening = get_detected_opening(game.moves, game.result, game.eco, game.opening)
     return {
         "id": game.id,
         "event": game.event,
         "site": game.site,
         "date": game.game_date,
         "round": game.round,
-        "white": game.white,
-        "black": game.black,
+        "white": normalize_player_name(game.white),
+        "black": normalize_player_name(game.black),
         "white_elo": game.white_elo,
         "black_elo": game.black_elo,
         "result": game.result,
         "eco": game.eco,
         "opening": game.opening,
+        "detected_opening": detected_opening,
         "ply_count": game.ply_count,
         "source": game.source,
         "pgn_object_key": game.pgn_object_key,
@@ -66,26 +75,179 @@ def player_name_variants(name: str):
     return sorted(v for v in variants if v)
 
 
+def sql_player_name(column: str):
+    return f"replace(replace(lower({column}), '_', ' '), '-', ' ')"
+
+
+def catalog_variants_for_player(player):
+    variants = {normalize_for_match(player["name"]), player["name"].strip().lower()}
+    for alias in player.get("aliases", []):
+        variants.add(normalize_for_match(alias))
+        variants.add(str(alias).strip().lower().replace("_", " ").replace("-", " "))
+    return sorted(value for value in variants if value)
+
+
+def get_catalog_variant_map():
+    return {
+        player["name"]: catalog_variants_for_player(player)
+        for player in HISTORICAL_PLAYERS
+    }
+
+
+def get_all_catalog_variants():
+    variants = set()
+    for player_variants in get_catalog_variant_map().values():
+        variants.update(player_variants)
+    return sorted(variants)
+
+
+def get_catalog_variants_for_name(name: str):
+    requested = normalize_for_match(name)
+    for player in HISTORICAL_PLAYERS:
+        variants = catalog_variants_for_player(player)
+        if requested in variants:
+            return player["name"], variants
+    return name, player_name_variants(name)
+
+
+def bind_values(prefix: str, values):
+    return {f"{prefix}_{index}": value for index, value in enumerate(values)}
+
+
+def placeholders(prefix: str, values):
+    return ", ".join(f":{prefix}_{index}" for index in range(len(values)))
+
+
+def curated_player_game_clause(player_variants, all_catalog_variants):
+    player_sql = placeholders("player", player_variants)
+    catalog_sql = placeholders("catalog", all_catalog_variants)
+    white = sql_player_name("white")
+    black = sql_player_name("black")
+    return (
+        f"(({white} IN ({player_sql}) AND {black} IN ({catalog_sql})) "
+        f"OR ({black} IN ({player_sql}) AND {white} IN ({catalog_sql})))"
+    )
+
+
 def serialize_game_row(row):
     data = row._mapping
+    detected_opening = get_detected_opening(data["moves"], data["result"], data["eco"], data["opening"])
     return {
         "id": data["id"],
         "event": data["event"],
         "site": data["site"],
         "date": data["game_date"],
         "round": data["round"],
-        "white": data["white"],
-        "black": data["black"],
+        "white": normalize_player_name(data["white"]),
+        "black": normalize_player_name(data["black"]),
         "white_elo": data["white_elo"],
         "black_elo": data["black_elo"],
         "result": data["result"],
         "eco": data["eco"],
         "opening": data["opening"],
+        "detected_opening": detected_opening,
         "ply_count": data["ply_count"],
         "source": data["source"],
         "pgn_object_key": data["pgn_object_key"],
         "moves": data["moves"],
     }
+
+
+def load_opening_book():
+    global OPENING_BOOK
+    if OPENING_BOOK is not None:
+        return OPENING_BOOK
+
+    opening_book = {}
+    base_path = Path(__file__).resolve().parents[1] / "data" / "openings"
+    for letter in ["A", "B", "C", "D", "E"]:
+        path = base_path / f"eco{letter}.json"
+        if not path.exists():
+            continue
+        with path.open("r", encoding="utf-8") as file:
+            opening_book.update(json.load(file))
+
+    OPENING_BOOK = opening_book
+    return OPENING_BOOK
+
+
+def find_opening_by_fen(fen: str):
+    if not fen:
+        return None
+    parts = fen.split()
+    if len(parts) < 2:
+        return None
+
+    search_key = f"{parts[0]} {parts[1]}"
+    opening_book = load_opening_book()
+    opening = opening_book.get(search_key)
+    if not opening:
+        for book_fen, info in opening_book.items():
+            if book_fen.startswith(search_key):
+                opening = info
+                break
+    if not opening:
+        return None
+
+    name = opening.get("name")
+    eco = opening.get("eco")
+    if not name:
+        return None
+    return {"name": name, "eco": eco}
+
+
+def find_opening_by_eco(eco: str):
+    clean_eco = str(eco or "").strip().upper()
+    if not clean_eco:
+        return None
+
+    matches = [
+        opening
+        for opening in load_opening_book().values()
+        if str(opening.get("eco") or "").strip().upper() == clean_eco and opening.get("name")
+    ]
+    if not matches:
+        return None
+
+    def move_depth(opening):
+        return len(str(opening.get("moves") or "").split())
+
+    opening = min(matches, key=move_depth)
+    return {"name": opening.get("name"), "eco": opening.get("eco")}
+
+
+def detect_opening_from_moves(moves: str, result: str = "*"):
+    if not moves:
+        return None
+
+    try:
+        pgn_text = f"{moves} {result or '*'}"
+        game = chess.pgn.read_game(io.StringIO(pgn_text))
+        if game is None:
+            return None
+
+        board = game.board()
+        positions = []
+        for move in game.mainline_moves():
+            board.push(move)
+            positions.append(board.fen())
+
+        for fen in reversed(positions):
+            opening = find_opening_by_fen(fen)
+            if opening:
+                return opening
+        return None
+    except Exception:
+        return None
+
+
+def get_detected_opening(moves: str, result: str = "*", eco: str = "", opening: str = ""):
+    detected = detect_opening_from_moves(moves, result)
+    if detected:
+        return detected
+
+    eco_code = eco or (opening if re.match(r"^[A-E][0-9]{2}$", str(opening or "").strip(), re.IGNORECASE) else "")
+    return find_opening_by_eco(eco_code)
 
 
 @router.post("/import-pgn")
@@ -173,45 +335,53 @@ def player_profile(
     name: str,
     db: Session = Depends(get_db),
 ):
-    variants = player_name_variants(name)
-    if not variants:
+    canonical_name, variants = get_catalog_variants_for_name(name)
+    all_catalog_variants = get_all_catalog_variants()
+    if not variants or not all_catalog_variants:
         raise HTTPException(status_code=400, detail="Missing player name")
 
-    variant_params = {f"name_{index}": value for index, value in enumerate(variants)}
-    placeholders = ", ".join(f":name_{index}" for index in range(len(variants)))
+    query_params = {
+        **bind_values("player", variants),
+        **bind_values("catalog", all_catalog_variants),
+    }
+    where_clause = curated_player_game_clause(variants, all_catalog_variants)
+    white_name = sql_player_name("white")
+    black_name = sql_player_name("black")
+    player_sql = placeholders("player", variants)
+    placeholders = player_sql
 
     total_games = int(db.execute(text(f"""
-        SELECT COALESCE(SUM(games), 0)
-        FROM imported_player_stats
-        WHERE lower(name) IN ({placeholders})
-    """), variant_params).scalar() or 0)
+        SELECT COUNT(*)
+        FROM imported_games
+        WHERE {where_clause}
+    """), query_params).scalar() or 0)
 
     row = db.execute(text(f"""
         SELECT
-            COUNT(*) FILTER (WHERE lower(white) IN ({placeholders})) AS as_white,
-            COUNT(*) FILTER (WHERE lower(black) IN ({placeholders})) AS as_black,
+            COUNT(*) FILTER (WHERE {white_name} IN ({player_sql})) AS as_white,
+            COUNT(*) FILTER (WHERE {black_name} IN ({player_sql})) AS as_black,
             COUNT(*) FILTER (
-                WHERE (lower(white) IN ({placeholders}) AND result = '1-0')
-                   OR (lower(black) IN ({placeholders}) AND result = '0-1')
+                WHERE ({white_name} IN ({player_sql}) AND result = '1-0')
+                   OR ({black_name} IN ({player_sql}) AND result = '0-1')
             ) AS wins,
             COUNT(*) FILTER (WHERE result IN ('1/2-1/2', '1/2', '½-½')) AS draws,
             COUNT(*) FILTER (
-                WHERE (lower(white) IN ({placeholders}) AND result = '0-1')
-                   OR (lower(black) IN ({placeholders}) AND result = '1-0')
+                WHERE ({white_name} IN ({player_sql}) AND result = '0-1')
+                   OR ({black_name} IN ({player_sql}) AND result = '1-0')
             ) AS losses,
-            COUNT(*) FILTER (WHERE lower(white) IN ({placeholders}) AND result = '1-0') AS white_wins,
+            COUNT(*) FILTER (WHERE {white_name} IN ({player_sql}) AND result = '1-0') AS white_wins,
             COUNT(*) FILTER (WHERE lower(white) IN ({placeholders}) AND result IN ('1/2-1/2', '1/2', '½-½')) AS white_draws,
-            COUNT(*) FILTER (WHERE lower(white) IN ({placeholders}) AND result = '0-1') AS white_losses,
-            COUNT(*) FILTER (WHERE lower(black) IN ({placeholders}) AND result = '0-1') AS black_wins,
+            COUNT(*) FILTER (WHERE {white_name} IN ({player_sql}) AND result = '0-1') AS white_losses,
+            COUNT(*) FILTER (WHERE {black_name} IN ({player_sql}) AND result = '0-1') AS black_wins,
             COUNT(*) FILTER (WHERE lower(black) IN ({placeholders}) AND result IN ('1/2-1/2', '1/2', '½-½')) AS black_draws,
-            COUNT(*) FILTER (WHERE lower(black) IN ({placeholders}) AND result = '1-0') AS black_losses
+            COUNT(*) FILTER (WHERE {black_name} IN ({player_sql}) AND result = '1-0') AS black_losses
         FROM imported_games
-        WHERE lower(white) IN ({placeholders}) OR lower(black) IN ({placeholders})
-    """), variant_params).first()
+        WHERE {where_clause}
+    """), query_params).first()
 
     data = row._mapping if row else {}
     return {
-        "name": name,
+        "name": canonical_name,
         "games": total_games,
         "as_white": int(data.get("as_white") or 0),
         "as_black": int(data.get("as_black") or 0),
@@ -240,16 +410,19 @@ def games(
 ):
     try:
         if player1.strip() and not player2.strip() and not opening.strip():
-            variants = player_name_variants(player1)
-            variant_params = {f"name_{index}": value for index, value in enumerate(variants)}
-            placeholders = ", ".join(f":name_{index}" for index in range(len(variants)))
-            where_clause = f"(lower(white) IN ({placeholders}) OR lower(black) IN ({placeholders}))"
+            _, variants = get_catalog_variants_for_name(player1)
+            all_catalog_variants = get_all_catalog_variants()
+            query_params = {
+                **bind_values("player", variants),
+                **bind_values("catalog", all_catalog_variants),
+            }
+            where_clause = curated_player_game_clause(variants, all_catalog_variants)
 
             total = int(db.execute(text(f"""
                 SELECT COUNT(*)
                 FROM imported_games
                 WHERE {where_clause}
-            """), variant_params).scalar() or 0)
+            """), query_params).scalar() or 0)
 
             rows = db.execute(text(f"""
                 SELECT id, event, site, game_date, round, white, black, white_elo, black_elo, result, eco, opening,
@@ -259,7 +432,7 @@ def games(
                 ORDER BY {get_games_order_sql(sort)}
                 LIMIT :limit OFFSET :offset
             """), {
-                **variant_params,
+                **query_params,
                 "limit": page_size,
                 "offset": (page - 1) * page_size,
             }).all()
@@ -327,6 +500,17 @@ def games(
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
+@router.get("/games/{game_id}")
+def game_by_id(
+    game_id: int,
+    db: Session = Depends(get_db),
+):
+    game = db.query(models.ImportedGame).filter(models.ImportedGame.id == game_id).first()
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+    return serialize_game(game)
+
+
 def get_games_order_sql(sort: str):
     return {
         "rating_white": "white_elo DESC NULLS LAST, id DESC",
@@ -350,21 +534,7 @@ def get_games_order_by(sort: str):
 
 
 def get_top_players(db: Session, limit=5):
-    names = get_catalog_player_names()
-    if not names:
-        return []
-
-    name_params = {f"name_{index}": value for index, value in enumerate(names)}
-    placeholders = ", ".join(f":name_{index}" for index in range(len(names)))
-    rows = db.execute(text(f"""
-        SELECT name, games
-        FROM imported_player_stats
-        WHERE name IN ({placeholders})
-        ORDER BY games DESC, lower(name) ASC
-        LIMIT :limit
-    """), {**name_params, "limit": limit}).all()
-
-    return [{"name": row.name or "Unknown", "games": int(row.games or 0)} for row in rows]
+    return get_players(db, page=1, page_size=limit, sort="games")["players"]
 
 
 def get_player_count_union(db: Session, search: str = ""):
@@ -388,39 +558,44 @@ def get_player_count_union(db: Session, search: str = ""):
 
 
 def get_players(db: Session, page: int = 1, page_size: int = 24, search: str = "", sort: str = "name"):
-    catalog_names = get_catalog_player_names()
-    if not catalog_names:
+    catalog_players = [
+        player["name"]
+        for player in HISTORICAL_PLAYERS
+        if not search.strip() or search.strip().lower() in player["name"].lower()
+    ]
+    if not catalog_players:
         return {"players": [], "total": 0, "page": page, "page_size": page_size}
 
-    needle = f"%{search.strip().lower()}%"
-    has_search = bool(search.strip())
-    order_by = "games DESC, lower(name) ASC" if sort == "games" else "lower(name) ASC"
-    name_params = {f"name_{index}": value for index, value in enumerate(catalog_names)}
-    placeholders = ", ".join(f":name_{index}" for index in range(len(catalog_names)))
-    where_sql = f"WHERE name IN ({placeholders}) AND (:has_search = false OR lower(name) LIKE :needle)"
+    all_catalog_variants = get_all_catalog_variants()
+    catalog_params = bind_values("catalog", all_catalog_variants)
+    catalog_sql = placeholders("catalog", all_catalog_variants)
+    white = sql_player_name("white")
+    black = sql_player_name("black")
+    players_with_counts = []
 
-    total = int(db.execute(text(f"SELECT COUNT(*) FROM imported_player_stats {where_sql}"), {
-        **name_params,
-        "has_search": has_search,
-        "needle": needle,
-    }).scalar() or 0)
+    for player_name in catalog_players:
+        variants = get_catalog_variant_map()[player_name]
+        player_params = bind_values("player", variants)
+        player_sql = placeholders("player", variants)
+        games = int(db.execute(text(f"""
+            SELECT COUNT(*)
+            FROM imported_games
+            WHERE (({white} IN ({player_sql}) AND {black} IN ({catalog_sql}))
+                OR ({black} IN ({player_sql}) AND {white} IN ({catalog_sql})))
+        """), {**player_params, **catalog_params}).scalar() or 0)
+        players_with_counts.append({"name": player_name, "games": games})
 
-    rows = db.execute(text(f"""
-        SELECT name, games
-        FROM imported_player_stats
-        {where_sql}
-        ORDER BY {order_by}
-        LIMIT :limit OFFSET :offset
-    """), {
-        **name_params,
-        "has_search": has_search,
-        "needle": needle,
-        "limit": page_size,
-        "offset": (page - 1) * page_size,
-    }).all()
+    if sort == "games":
+        players_with_counts.sort(key=lambda player: (-player["games"], player["name"].lower()))
+    else:
+        players_with_counts.sort(key=lambda player: player["name"].lower())
+
+    total = len(players_with_counts)
+    start = (page - 1) * page_size
+    rows = players_with_counts[start:start + page_size]
 
     return {
-        "players": [{"name": row.name or "Unknown", "games": int(row.games or 0)} for row in rows],
+        "players": rows,
         "total": total,
         "page": page,
         "page_size": page_size,

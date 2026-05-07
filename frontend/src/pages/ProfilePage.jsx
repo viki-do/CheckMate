@@ -5,7 +5,6 @@ import ProfileGameHistory from '../components/profile/ProfileGameHistory';
 import ProfileHeader from '../components/profile/ProfileHeader';
 import ProfileSearchPanel from '../components/profile/ProfileSearchPanel';
 import ProfileTabs from '../components/profile/ProfileTabs';
-import { profileGameHistory } from '../constants/profileData';
 
 const API_BASE = "http://localhost:8000";
 
@@ -13,8 +12,10 @@ const ProfilePage = ({ archiveMode = false }) => {
     const { username: urlUsername } = useParams();
     const navigate = useNavigate();
 
-    const [user, setUser] = useState({ username: '', email: '', provider: '', joined: 'Apr 8, 2026' });
-    const [history] = useState(profileGameHistory);
+    const [user, setUser] = useState({ username: '', email: '', provider: '', bio: '', about_me: '', joined: 'Apr 8, 2026' });
+    const [history, setHistory] = useState([]);
+    const [historyTotal, setHistoryTotal] = useState(0);
+    const [isHistoryLoading, setIsHistoryLoading] = useState(false);
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [selectedGameType] = useState("All Recent Games");
     const [isResultOpen, setIsResultOpen] = useState(false);
@@ -84,6 +85,34 @@ const ProfilePage = ({ archiveMode = false }) => {
     }, [token, archiveMode]);
 
     useEffect(() => {
+        const targetUsername = urlUsername || user.username || localStorage.getItem('chessUsername');
+        if (!targetUsername) return;
+
+        let isMounted = true;
+        setIsHistoryLoading(true);
+        const limit = archiveMode ? 50 : 5;
+
+        axios.get(`${API_BASE}/user-games/${encodeURIComponent(targetUsername)}?offset=0&limit=${limit}`)
+            .then((res) => {
+                if (!isMounted) return;
+                setHistory(res.data.games || []);
+                setHistoryTotal(res.data.total || 0);
+            })
+            .catch((err) => {
+                console.error("Game history hiba:", err);
+                if (isMounted) {
+                    setHistory([]);
+                    setHistoryTotal(0);
+                }
+            })
+            .finally(() => {
+                if (isMounted) setIsHistoryLoading(false);
+            });
+
+        return () => { isMounted = false; };
+    }, [archiveMode, urlUsername, user.username]);
+
+    useEffect(() => {
         const closeAll = () => { setIsDropdownOpen(false); setIsResultOpen(false); };
         window.addEventListener('click', closeAll);
         return () => window.removeEventListener('click', closeAll);
@@ -108,7 +137,9 @@ const ProfilePage = ({ archiveMode = false }) => {
                 <div className="flex flex-col lg:flex-row gap-6 mt-6 items-start">
                     <ProfileGameHistory
                         history={history}
-                        username={user.username}
+                        total={historyTotal}
+                        isLoading={isHistoryLoading}
+                        username={urlUsername || user.username}
                         archiveMode={archiveMode}
                         onSeeMore={handleSeeMore}
                     />
