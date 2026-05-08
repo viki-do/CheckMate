@@ -26,6 +26,7 @@ const GameBoard = () => {
     const [analysisData, setAnalysisData] = useState(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [userName, setUserName] = useState("You");
+    const [userAvatarUrl, setUserAvatarUrl] = useState("");
 
 
     // --- 2. HOOK ÉS NAVIGÁCIÓ ---
@@ -44,6 +45,7 @@ const GameBoard = () => {
         whiteTime, blackTime, activeTimeColor, setBlackTime, setWhiteTime,
         lastTimeControl, executeMove, setHistory, handleMouseDown, handleMouseUp,
     } = gameLogic;
+    const userAvatarSrc = userAvatarUrl ? `${API_BASE}${userAvatarUrl}` : "";
 
     // --- ÚJ FÜGGVÉNYEK ---
 
@@ -73,6 +75,27 @@ const GameBoard = () => {
         setUserName(storedName);
     }
     }, []);
+
+    useEffect(() => {
+        if (!token) return;
+
+        let isMounted = true;
+        axios.get(`${API_BASE}/profile`, {
+            headers: { Authorization: `Bearer ${token}` },
+        }).then((res) => {
+            if (isMounted) setUserAvatarUrl(res.data.avatar_url || "");
+        }).catch(() => {});
+
+        const handleAvatarUpdated = (event) => {
+            setUserAvatarUrl(event.detail?.avatarUrl || "");
+        };
+        window.addEventListener("profile-avatar-updated", handleAvatarUpdated);
+
+        return () => {
+            isMounted = false;
+            window.removeEventListener("profile-avatar-updated", handleAvatarUpdated);
+        };
+    }, [API_BASE, token]);
 
     useEffect(() => {
     if (!archiveGameId) {
@@ -488,6 +511,7 @@ const GameBoard = () => {
                 <PlayerInfoBar
                     type="bottom"
                     userName={userName}
+                    userAvatarUrl={userAvatarSrc}
                     material={bottomMaterial}
                     side={bottomSide}
                     showClock={showClock}

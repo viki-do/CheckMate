@@ -1,12 +1,45 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { MoreHorizontal } from 'lucide-react';
+import axios from 'axios';
+
+const API_BASE = "http://localhost:8000";
+
+const getAvatarSrc = (avatarUrl) => {
+    if (!avatarUrl) return "/assets/icons/noavatar.gif";
+    if (avatarUrl.startsWith("http")) return avatarUrl;
+    return `${API_BASE}${avatarUrl}`;
+};
+
 const Navbar = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const username = localStorage.getItem('chessUsername');
     const [isPlayHovered, setIsPlayHovered] = useState(false);
     const [isOtherHovered, setIsOtherHovered] = useState(false);
+    const [avatarUrl, setAvatarUrl] = useState("");
+
+    useEffect(() => {
+        const token = localStorage.getItem('chessToken');
+        if (!token) return;
+
+        let isMounted = true;
+        axios.get(`${API_BASE}/profile`, {
+            headers: { Authorization: `Bearer ${token}` },
+        }).then((res) => {
+            if (isMounted) setAvatarUrl(res.data.avatar_url || "");
+        }).catch(() => {});
+
+        const handleAvatarUpdated = (event) => {
+            setAvatarUrl(event.detail?.avatarUrl || "");
+        };
+        window.addEventListener("profile-avatar-updated", handleAvatarUpdated);
+
+        return () => {
+            isMounted = false;
+            window.removeEventListener("profile-avatar-updated", handleAvatarUpdated);
+        };
+    }, []);
 
     const handleLogout = () => {
         localStorage.clear();
@@ -215,8 +248,12 @@ const Navbar = () => {
                     onClick={() => navigate(`/member/${username}`)}
                     className={`w-full min-w-0 flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-all ${location.pathname.startsWith('/member') ? 'bg-[#312e2b] text-white' : 'text-[#bab9b8] hover:bg-[#312e2b] hover:text-white'}`}
                 >
-                    <div className="w-6 h-6 rounded flex justify-center items-center overflow-hidden">
-                        <ImageIcon src="/assets/icons/noavatar.gif" alt="Profile" className="w-6 h-6" />
+                    <div className="w-6 h-6 bg-[#3c3a37] rounded flex justify-center items-center overflow-hidden">
+                        {avatarUrl ? (
+                            <img src={getAvatarSrc(avatarUrl)} alt="Profile" className="w-full h-full object-cover" />
+                        ) : (
+                            <i className="fas fa-user text-white text-[12px]"></i>
+                        )}
                     </div>
                     <span className="text-sm font-semibold truncate">{username}</span>
                 </div>

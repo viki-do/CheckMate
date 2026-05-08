@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { PiecePawn } from "../components/icons/Icons";
 
@@ -28,12 +29,14 @@ const SelectField = ({ value, options }) => (
     </div>
 );
 
-const TextField = ({ value = "", placeholder = "", onChange = () => {} }) => (
+const TextField = ({ value = "", placeholder = "", onChange = () => {}, readOnly = false, type = "text" }) => (
     <input
+        type={type}
         value={value}
         placeholder={placeholder}
         onChange={onChange}
-        className="w-full bg-[#343330] border border-[#4a4845] rounded-md px-3 py-2 text-[#d7d6d4] placeholder:text-[#777] text-[13px] font-medium outline-none focus:border-[#81b64c]"
+        readOnly={readOnly}
+        className={`w-full bg-[#343330] border border-[#4a4845] rounded-md px-3 py-2 text-[#d7d6d4] placeholder:text-[#777] text-[13px] font-medium outline-none focus:border-[#81b64c] ${readOnly ? "cursor-default opacity-85" : ""}`}
     />
 );
 
@@ -44,9 +47,27 @@ const DetailRow = ({ label, children }) => (
     </div>
 );
 
+const formatJoinDate = (value) => {
+    if (!value) return "";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    return new Intl.DateTimeFormat("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+    }).format(date);
+};
+
+const getAvatarSrc = (avatarUrl) => {
+    if (!avatarUrl) return "/assets/icons/noavatar.gif";
+    if (avatarUrl.startsWith("http")) return avatarUrl;
+    return `${API_BASE}${avatarUrl}`;
+};
+
 const SettingsProfilePage = () => {
+    const navigate = useNavigate();
+    const avatarInputRef = useRef(null);
     const [username, setUsername] = useState(localStorage.getItem("chessUsername") || "Viki");
-    const [savedUsername, setSavedUsername] = useState(localStorage.getItem("chessUsername") || "Viki");
     const [firstName, setFirstName] = useState("");
     const [savedFirstName, setSavedFirstName] = useState("");
     const [lastName, setLastName] = useState("");
@@ -56,20 +77,21 @@ const SettingsProfilePage = () => {
     const [aboutMe, setAboutMe] = useState("");
     const [savedAboutMe, setSavedAboutMe] = useState("");
     const [isSavingBio, setIsSavingBio] = useState(false);
-    const [isSavingAbout, setIsSavingAbout] = useState(false);
-    const [isSavingUsername, setIsSavingUsername] = useState(false);
-    const [isSavingName, setIsSavingName] = useState(false);
+    const [isSavingDetails, setIsSavingDetails] = useState(false);
     const [bioSavedFlash, setBioSavedFlash] = useState(false);
-    const [aboutSavedFlash, setAboutSavedFlash] = useState(false);
-    const [usernameSavedFlash, setUsernameSavedFlash] = useState(false);
-    const [nameSavedFlash, setNameSavedFlash] = useState(false);
-    const [usernameError, setUsernameError] = useState("");
-    const joinDate = useMemo(() => "Apr 8, 2026", []);
+    const [detailsSavedFlash, setDetailsSavedFlash] = useState(false);
+    const [createdAt, setCreatedAt] = useState("");
+    const [avatarUrl, setAvatarUrl] = useState("");
+    const [isAvatarSaving, setIsAvatarSaving] = useState(false);
+    const [avatarError, setAvatarError] = useState("");
+    const joinDate = useMemo(() => formatJoinDate(createdAt), [createdAt]);
     const token = localStorage.getItem("chessToken");
     const isBioDirty = bio !== savedBio;
-    const isAboutDirty = aboutMe !== savedAboutMe;
-    const isUsernameDirty = username.trim() !== savedUsername;
-    const isNameDirty = firstName !== savedFirstName || lastName !== savedLastName;
+    const isDetailsDirty = (
+        firstName !== savedFirstName ||
+        lastName !== savedLastName ||
+        aboutMe !== savedAboutMe
+    );
     const fullName = [savedFirstName, savedLastName].filter(Boolean).join(" ");
 
     useEffect(() => {
@@ -84,8 +106,9 @@ const SettingsProfilePage = () => {
             const nextUsername = res.data.username || username;
             const nextFirstName = res.data.first_name || "";
             const nextLastName = res.data.last_name || "";
+            setCreatedAt(res.data.created_at || "");
+            setAvatarUrl(res.data.avatar_url || "");
             setUsername(nextUsername);
-            setSavedUsername(nextUsername);
             setBio(nextBio);
             setSavedBio(nextBio);
             setAboutMe(nextAboutMe);
@@ -133,43 +156,78 @@ const SettingsProfilePage = () => {
         }, setIsSavingBio, setBioSavedFlash);
     };
 
-    const saveUsername = () => {
-        const nextUsername = username.trim();
-        if (!nextUsername || !isUsernameDirty || isSavingUsername) return;
-        setUsernameError("");
-        saveProfile({ username: nextUsername }, (data) => {
-            const saved = data.username || nextUsername;
-            setUsername(saved);
-            setSavedUsername(saved);
-            localStorage.setItem("chessUsername", saved);
-        }, setIsSavingUsername, setUsernameSavedFlash, (err) => {
-            if (err.response?.status === 409) {
-                setUsernameError("This username is already taken.");
-                return;
-            }
-            setUsernameError("Could not change username.");
-        });
-    };
-
-    const saveName = () => {
-        if (!isNameDirty || isSavingName) return;
-        saveProfile({ first_name: firstName, last_name: lastName }, (data) => {
+    const saveDetails = () => {
+        if (!isDetailsDirty || isSavingDetails) return;
+        saveProfile({
+            first_name: firstName,
+            last_name: lastName,
+            about_me: aboutMe,
+        }, (data) => {
             const nextFirstName = data.first_name || "";
             const nextLastName = data.last_name || "";
+            const nextAboutMe = data.about_me || "";
             setFirstName(nextFirstName);
             setSavedFirstName(nextFirstName);
             setLastName(nextLastName);
             setSavedLastName(nextLastName);
-        }, setIsSavingName, setNameSavedFlash);
-    };
-
-    const saveAboutMe = () => {
-        if (!isAboutDirty || isSavingAbout) return;
-        saveProfile({ about_me: aboutMe }, (data) => {
-            const nextAboutMe = data.about_me || "";
             setAboutMe(nextAboutMe);
             setSavedAboutMe(nextAboutMe);
-        }, setIsSavingAbout, setAboutSavedFlash);
+        }, setIsSavingDetails, setDetailsSavedFlash);
+    };
+
+    const cancelDetails = () => {
+        setFirstName(savedFirstName);
+        setLastName(savedLastName);
+        setAboutMe(savedAboutMe);
+    };
+
+    const uploadAvatar = async (event) => {
+        const file = event.target.files?.[0];
+        event.target.value = "";
+        if (!file || isAvatarSaving) return;
+
+        setIsAvatarSaving(true);
+        setAvatarError("");
+        const formData = new FormData();
+        formData.append("file", file);
+
+        try {
+            const res = await axios.post(`${API_BASE}/profile/avatar`, formData, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "multipart/form-data",
+                },
+            });
+            setAvatarUrl(res.data.avatar_url || "");
+            window.dispatchEvent(new CustomEvent("profile-avatar-updated", {
+                detail: { avatarUrl: res.data.avatar_url || "" },
+            }));
+        } catch (err) {
+            setAvatarError(err.response?.data?.detail || "Could not upload avatar.");
+        } finally {
+            setIsAvatarSaving(false);
+        }
+    };
+
+    const deleteAvatar = async (event) => {
+        event.stopPropagation();
+        if (!avatarUrl || isAvatarSaving) return;
+
+        setIsAvatarSaving(true);
+        setAvatarError("");
+        try {
+            const res = await axios.delete(`${API_BASE}/profile/avatar`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            setAvatarUrl(res.data.avatar_url || "");
+            window.dispatchEvent(new CustomEvent("profile-avatar-updated", {
+                detail: { avatarUrl: res.data.avatar_url || "" },
+            }));
+        } catch (err) {
+            setAvatarError(err.response?.data?.detail || "Could not remove avatar.");
+        } finally {
+            setIsAvatarSaving(false);
+        }
     };
 
     return (
@@ -217,8 +275,60 @@ const SettingsProfilePage = () => {
                             </p>
 
                             <div className="grid grid-cols-[170px_minmax(0,1fr)] gap-7 mb-16">
-                                <div className="w-[170px] h-[170px] bg-[#e9e8e6] rounded-md flex items-center justify-center overflow-hidden">
-                                    <img src="/assets/icons/noavatar.gif" alt="avatar" className="w-full opacity-55" />
+                                <div>
+                                    <div className="group relative w-[170px] h-[170px]">
+                                        <button
+                                            type="button"
+                                            onClick={() => avatarInputRef.current?.click()}
+                                            disabled={isAvatarSaving}
+                                            className="relative w-full h-full bg-[#e9e8e6] rounded-md flex items-center justify-center overflow-hidden cursor-pointer disabled:cursor-wait"
+                                            aria-label="Upload avatar"
+                                        >
+                                            <img
+                                                src={getAvatarSrc(avatarUrl)}
+                                                alt="avatar"
+                                                className={`w-full h-full object-cover ${avatarUrl ? "" : "opacity-55"}`}
+                                            />
+                                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/45 transition-colors"></div>
+                                            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <div className="relative text-[#f4f3f0] drop-shadow">
+                                                    {avatarUrl ? (
+                                                        <i className="fas fa-camera text-[42px]"></i>
+                                                    ) : (
+                                                        <>
+                                                            <i className="fas fa-camera text-[42px]"></i>
+                                                            <span className="absolute -right-3 -bottom-2 w-8 h-8 rounded-full bg-[#f4f3f0] text-[#4a4845] flex items-center justify-center border-2 border-[#5d5a56]">
+                                                                <i className="fas fa-plus text-[18px]"></i>
+                                                            </span>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </button>
+                                    </div>
+                                    {avatarUrl && (
+                                        <button
+                                            type="button"
+                                            onClick={deleteAvatar}
+                                            disabled={isAvatarSaving}
+                                            className="w-[170px] mt-3 flex items-center justify-center gap-2 text-[#d7d6d4] hover:text-white text-[15px] font-black disabled:opacity-60"
+                                        >
+                                            <i className="fas fa-trash text-[13px]"></i>
+                                            Remove
+                                        </button>
+                                    )}
+                                    <input
+                                        ref={avatarInputRef}
+                                        type="file"
+                                        accept="image/png,image/jpeg,image/gif,image/webp"
+                                        onChange={uploadAvatar}
+                                        className="hidden"
+                                    />
+                                    {(isAvatarSaving || avatarError) && (
+                                        <div className={`mt-2 text-[12px] font-bold ${avatarError ? "text-[#ff4b35]" : "text-[#8b8987]"}`}>
+                                            {avatarError || "Saving avatar..."}
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div className="pt-1">
@@ -266,58 +376,29 @@ const SettingsProfilePage = () => {
                             </div>
 
                             <div className="border-t border-[#3c3a37] pt-9">
-                                <h2 className="text-[20px] font-black mb-5">Details</h2>
+                                <div className="flex items-center gap-3 mb-5">
+                                    <h2 className="text-[20px] font-black">Details</h2>
+                                    <span className="text-[#8b8987] text-[12px] font-bold">
+                                        {isSavingDetails ? "Saving..." : detailsSavedFlash ? "Saved" : isDetailsDirty ? "Unsaved changes" : ""}
+                                    </span>
+                                </div>
                                 <div className="flex flex-col gap-2.5 max-w-[660px]">
                                     <DetailRow label="Join Date"><div className="text-[#d7d6d4] text-[14px] font-semibold">{joinDate}</div></DetailRow>
                                     <DetailRow label="Username">
                                         <div>
                                             <div className="grid grid-cols-[minmax(0,1fr)_140px] gap-3 items-center">
-                                                <TextField value={username} onChange={(event) => {
-                                                    setUsername(event.target.value);
-                                                    setUsernameError("");
-                                                }} />
+                                                <TextField value={username} readOnly />
                                                 <button
-                                                    onClick={saveUsername}
-                                                    disabled={!isUsernameDirty || isSavingUsername || !username.trim()}
-                                                    className={`h-[46px] rounded-md font-black text-[15px] transition-all ${
-                                                        isUsernameDirty
-                                                            ? "bg-gradient-to-b from-[#8bc34a] to-[#5fa444] text-white"
-                                                            : "bg-gradient-to-b from-[#3a3936] to-[#2d2c29] text-[#d7d6d4] opacity-70"
-                                                    }`}
+                                                    onClick={() => navigate("/settings/change-username")}
+                                                    className="h-[46px] rounded-md font-black text-[15px] transition-all bg-gradient-to-b from-[#3a3936] to-[#2d2c29] text-[#d7d6d4] hover:from-[#45433f] hover:to-[#343330]"
                                                 >
-                                                    {isSavingUsername ? "Saving..." : usernameSavedFlash ? "Saved" : "Change"}
+                                                    Change
                                                 </button>
                                             </div>
-                                            {usernameError && <div className="text-[#fa412d] text-[12px] font-semibold mt-2">{usernameError}</div>}
                                         </div>
                                     </DetailRow>
                                     <DetailRow label="First Name"><TextField value={firstName} onChange={(event) => setFirstName(event.target.value)} /></DetailRow>
                                     <DetailRow label="Last Name"><TextField value={lastName} onChange={(event) => setLastName(event.target.value)} /></DetailRow>
-                                    <DetailRow label="">
-                                        <div className="grid grid-cols-2 gap-3 max-w-[400px]">
-                                            <button
-                                                onClick={() => {
-                                                    setFirstName(savedFirstName);
-                                                    setLastName(savedLastName);
-                                                }}
-                                                disabled={!isNameDirty || isSavingName}
-                                                className="h-[46px] rounded-md bg-gradient-to-b from-[#3a3936] to-[#2d2c29] disabled:opacity-55 text-[#d7d6d4] font-black text-[15px] shadow-sm"
-                                            >
-                                                Cancel
-                                            </button>
-                                            <button
-                                                onClick={saveName}
-                                                disabled={!isNameDirty || isSavingName}
-                                                className={`h-[46px] rounded-md font-black text-[15px] shadow-sm transition-all ${
-                                                    isNameDirty
-                                                        ? "bg-gradient-to-b from-[#8bc34a] to-[#5fa444] text-white"
-                                                        : "bg-gradient-to-b from-[#5f8f43] to-[#477436] text-[#bab9b8] opacity-65"
-                                                }`}
-                                            >
-                                                {isSavingName ? "Saving..." : nameSavedFlash ? "Saved" : "Save"}
-                                            </button>
-                                        </div>
-                                    </DetailRow>
                                     <DetailRow label="Location"><TextField /></DetailRow>
                                     <DetailRow label="Country"><SelectField value="Hungary" options={["Hungary"]} /></DetailRow>
                                     <DetailRow label="Language"><SelectField value="English" options={["English"]} /></DetailRow>
@@ -341,26 +422,28 @@ const SettingsProfilePage = () => {
                                                 onChange={(event) => setAboutMe(event.target.value)}
                                                 className="w-full h-20 bg-[#343330] border border-[#4a4845] rounded-md px-3.5 py-2.5 text-[#d7d6d4] outline-none focus:border-[#81b64c] resize-none"
                                             />
-                                            <div className="grid grid-cols-2 gap-3 mt-4 max-w-[400px]">
-                                                <button
-                                                    onClick={() => setAboutMe(savedAboutMe)}
-                                                    disabled={!isAboutDirty || isSavingAbout}
-                                                    className="h-[46px] rounded-md bg-gradient-to-b from-[#3a3936] to-[#2d2c29] disabled:opacity-55 text-[#d7d6d4] font-black text-[15px] shadow-sm"
-                                                >
-                                                    Cancel
-                                                </button>
-                                                <button
-                                                    onClick={saveAboutMe}
-                                                    disabled={!isAboutDirty || isSavingAbout}
-                                                    className={`h-[46px] rounded-md font-black text-[15px] shadow-sm transition-all ${
-                                                        isAboutDirty
-                                                            ? "bg-gradient-to-b from-[#8bc34a] to-[#5fa444] text-white"
-                                                            : "bg-gradient-to-b from-[#5f8f43] to-[#477436] text-[#bab9b8] opacity-65"
-                                                    }`}
-                                                >
-                                                    {isSavingAbout ? "Saving..." : aboutSavedFlash ? "Saved" : "Save"}
-                                                </button>
-                                            </div>
+                                        </div>
+                                    </DetailRow>
+                                    <DetailRow label="">
+                                        <div className="grid grid-cols-2 gap-3 max-w-[400px] pt-2">
+                                            <button
+                                                onClick={cancelDetails}
+                                                disabled={!isDetailsDirty || isSavingDetails}
+                                                className="h-[46px] rounded-md bg-gradient-to-b from-[#3a3936] to-[#2d2c29] disabled:opacity-55 text-[#d7d6d4] font-black text-[15px] shadow-sm"
+                                            >
+                                                Cancel
+                                            </button>
+                                            <button
+                                                onClick={saveDetails}
+                                                disabled={!isDetailsDirty || isSavingDetails}
+                                                className={`h-[46px] rounded-md font-black text-[15px] shadow-sm transition-all ${
+                                                    isDetailsDirty
+                                                        ? "bg-gradient-to-b from-[#8bc34a] to-[#5fa444] text-white"
+                                                        : "bg-gradient-to-b from-[#5f8f43] to-[#477436] text-[#bab9b8] opacity-65"
+                                                }`}
+                                            >
+                                                {isSavingDetails ? "Saving..." : detailsSavedFlash ? "Saved" : "Save"}
+                                            </button>
                                         </div>
                                     </DetailRow>
                                 </div>

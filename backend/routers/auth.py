@@ -1,8 +1,9 @@
 import os
 import jwt
 import uuid
+import re
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.security import OAuth2PasswordBearer
 from fastapi.responses import RedirectResponse
 from sqlalchemy import func
@@ -14,6 +15,14 @@ import models
 from database import SessionLocal
 
 router = APIRouter(tags=["Authentication"])
+BACKEND_ROOT = os.path.dirname(os.path.dirname(__file__))
+AVATAR_DIR = os.path.join(BACKEND_ROOT, "uploads", "avatars")
+ALLOWED_AVATAR_TYPES = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/gif": ".gif",
+    "image/webp": ".webp",
+}
 
 # Konfigurációk (a main.py-ból ide másolva)
 SECRET_KEY = os.getenv("SECRET_KEY")
@@ -74,11 +83,46 @@ class UserLogin(BaseModel):
     password: str
 
 class UserProfileUpdate(BaseModel):
-    username: str | None = None
     bio: str | None = None
     about_me: str | None = None
     first_name: str | None = None
     last_name: str | None = None
+
+class UsernameChangeRequest(BaseModel):
+    username: str
+    password: str
+
+def is_valid_username(value: str):
+    username = value.strip()
+    return (
+        bool(re.search(r"[A-Za-z]", username)) and
+        bool(re.match(r"^[A-Za-z0-9]", username)) and
+        3 <= len(username) <= 25 and
+        bool(re.match(r"^[A-Za-z0-9_-]+$", username)) and
+        not bool(re.search(r"[-_](?![A-Za-z0-9])", username))
+    )
+
+def profile_payload(user: models.User):
+    return {
+        "username": user.username,
+        "email": user.email,
+        "provider": user.provider,
+        "bio": user.bio or "",
+        "about_me": user.about_me or "",
+        "first_name": user.first_name or "",
+        "last_name": user.last_name or "",
+        "avatar_url": user.avatar_url or "",
+        "created_at": user.created_at,
+    }
+
+def delete_avatar_file(avatar_url: str | None):
+    if not avatar_url or not avatar_url.startswith("/uploads/avatars/"):
+        return
+    filename = os.path.basename(avatar_url)
+    path = os.path.abspath(os.path.join(AVATAR_DIR, filename))
+    avatars_root = os.path.abspath(AVATAR_DIR)
+    if path.startswith(avatars_root) and os.path.exists(path):
+        os.remove(path)
 
 # --- ÚTVONALAK ---
 
@@ -146,33 +190,13 @@ async def auth_github(request: Request, db: Session = Depends(get_db)):
 def get_profile(user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.id == uuid.UUID(user_id)).first()
     if not user: raise HTTPException(status_code=404, detail="Nem található")
-    return {
-        "username": user.username,
-        "email": user.email,
-        "provider": user.provider,
-        "bio": user.bio or "",
-        "about_me": user.about_me or "",
-        "first_name": user.first_name or "",
-        "last_name": user.last_name or "",
-    }
+    return profile_payload(user)
 
 @router.put("/profile")
 def update_profile(data: UserProfileUpdate, user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.id == uuid.UUID(user_id)).first()
     if not user: raise HTTPException(status_code=404, detail="Nem talÃ¡lhatÃ³")
 
-    if data.username is not None:
-        next_username = data.username.strip()
-        if not next_username:
-            raise HTTPException(status_code=400, detail="Username is required")
-        existing_user = (
-            db.query(models.User)
-            .filter(func.lower(models.User.username) == next_username.lower(), models.User.id != user.id)
-            .first()
-        )
-        if existing_user:
-            raise HTTPException(status_code=409, detail="Username is already taken")
-        user.username = next_username[:50]
     if data.bio is not None:
         user.bio = data.bio[:50]
     if data.about_me is not None:
@@ -184,12 +208,104 @@ def update_profile(data: UserProfileUpdate, user_id: str = Depends(get_current_u
 
     db.commit()
     db.refresh(user)
-    return {
-        "username": user.username,
-        "email": user.email,
-        "provider": user.provider,
-        "bio": user.bio or "",
-        "about_me": user.about_me or "",
-        "first_name": user.first_name or "",
-        "last_name": user.last_name or "",
-    }
+    return profile_payload(user)
+
+@router.post("/profile/avatar")
+async def upload_avatar(
+    file: UploadFile = File(...),
+    user_id: str = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    user = db.query(models.User).filter(models.User.id == uuid.UUID(user_id)).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Nem talÃ¡lhatÃ³")
+
+    extension = ALLOWED_AVATAR_TYPES.get(file.content_type)
+    if not extension:
+        raise HTTPException(status_code=400, detail="Only JPG, PNG, GIF, and WebP images are supported")
+
+    contents = await file.read()
+    if len(contents) > 3 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Avatar image must be 3 MB or smaller")
+
+    os.makedirs(AVATAR_DIR, exist_ok=True)
+    delete_avatar_file(user.avatar_url)
+    filename = f"{user.id}-{uuid.uuid4().hex}{extension}"
+    path = os.path.join(AVATAR_DIR, filename)
+    with open(path, "wb") as avatar_file:
+        avatar_file.write(contents)
+
+    user.avatar_url = f"/uploads/avatars/{filename}"
+    db.commit()
+    db.refresh(user)
+    return profile_payload(user)
+
+@router.delete("/profile/avatar")
+def delete_avatar(user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.id == uuid.UUID(user_id)).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Nem talÃ¡lhatÃ³")
+
+    delete_avatar_file(user.avatar_url)
+    user.avatar_url = None
+    db.commit()
+    db.refresh(user)
+    return profile_payload(user)
+
+@router.put("/profile/username")
+def change_username(data: UsernameChangeRequest, user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.id == uuid.UUID(user_id)).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Nem talÃƒÂ¡lhatÃƒÂ³")
+
+    if not user.password_hash or not pwd_context.verify(data.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Incorrect password")
+
+    next_username = data.username.strip()
+    if not next_username:
+        raise HTTPException(status_code=400, detail="Username is required")
+    if not is_valid_username(next_username):
+        raise HTTPException(status_code=400, detail="Username does not meet the requirements")
+    if next_username.lower() == user.username.lower():
+        raise HTTPException(status_code=409, detail="This is your current username")
+
+    existing_user = (
+        db.query(models.User)
+        .filter(func.lower(models.User.username) == next_username.lower(), models.User.id != user.id)
+        .first()
+    )
+    if existing_user:
+        raise HTTPException(status_code=409, detail="Username is already taken")
+
+    user.username = next_username[:50]
+    db.commit()
+    db.refresh(user)
+    return {"username": user.username}
+
+@router.get("/profile/username/check")
+def check_username_availability(
+    username: str = Query(..., min_length=1),
+    user_id: str = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    user = db.query(models.User).filter(models.User.id == uuid.UUID(user_id)).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Nem talÃƒÂ¡lhatÃƒÂ³")
+
+    next_username = username.strip()
+    if not next_username:
+        return {"available": False, "reason": "invalid"}
+    if not is_valid_username(next_username):
+        return {"available": False, "reason": "invalid"}
+    if next_username.lower() == user.username.lower():
+        return {"available": False, "reason": "current"}
+
+    existing_user = (
+        db.query(models.User)
+        .filter(func.lower(models.User.username) == next_username.lower(), models.User.id != user.id)
+        .first()
+    )
+    if existing_user:
+        return {"available": False, "reason": "taken"}
+
+    return {"available": True, "reason": None}

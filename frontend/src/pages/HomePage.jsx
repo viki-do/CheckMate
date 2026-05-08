@@ -13,7 +13,9 @@ const HomePage = () => {
     const [reviewGame, setReviewGame] = React.useState(null);
     const [gameHistory, setGameHistory] = React.useState([]);
     const [isHistoryLoading, setIsHistoryLoading] = React.useState(false);
+    const [avatarUrl, setAvatarUrl] = React.useState("");
     const username = localStorage.getItem('chessUsername');
+    const avatarSrc = avatarUrl ? `http://localhost:8000${avatarUrl}` : "";
 
     React.useEffect(() => {
         const fetchLatest = async () => {
@@ -49,16 +51,51 @@ const HomePage = () => {
         return () => { isMounted = false; };
     }, [username]);
 
+    React.useEffect(() => {
+        let isMounted = true;
+        axios.get(`http://localhost:8000/profile`, {
+            headers: { Authorization: `Bearer ${localStorage.getItem('chessToken')}` }
+        }).then((res) => {
+            if (isMounted) setAvatarUrl(res.data.avatar_url || "");
+        }).catch(() => {});
+
+        const handleAvatarUpdated = (event) => {
+            setAvatarUrl(event.detail?.avatarUrl || "");
+        };
+        window.addEventListener("profile-avatar-updated", handleAvatarUpdated);
+        return () => {
+            isMounted = false;
+            window.removeEventListener("profile-avatar-updated", handleAvatarUpdated);
+        };
+    }, []);
+
     return (
     <div className="flex flex-col p-10 bg-[#2f2e2a] min-h-screen font-sans text-[#bab9b8]">
         
         {/* --- 1. FELHASZNÁLÓI FEJLÉC --- */}
-        <div className="flex items-center gap-3 mb-10">
-            <div className="w-10 h-10 bg-[#3c3a37] rounded flex items-center justify-center overflow-hidden">
-                <i className="fas fa-user text-white"></i>
-            </div>
+        <div className="flex items-center gap-3 mb-10 w-fit">
+            <button
+                type="button"
+                onClick={() => navigate(`/member/${username || 'user'}`)}
+                className="w-10 h-10 bg-[#3c3a37] rounded flex items-center justify-center overflow-hidden transition-colors hover:bg-[#4a4845] cursor-pointer"
+                aria-label="Open profile"
+            >
+                {avatarSrc ? (
+                    <img src={avatarSrc} alt="avatar" className="w-full h-full object-cover" />
+                ) : (
+                    <i className="fas fa-user text-white"></i>
+                )}
+            </button>
             <h1 className="text-xl font-bold text-white flex items-center gap-2">
-                {username || "IOViktoria01"} <span className="text-sm">🇭🇺</span> <span className="text-blue-400 text-xs">💎</span>
+                <button
+                    type="button"
+                    onClick={() => navigate(`/member/${username || 'user'}`)}
+                    className="font-bold text-white cursor-pointer"
+                >
+                    {username || "username" }
+                </button>
+                <span className="text-sm cursor-help" title="Hungary">🇭🇺</span>
+                <span className="text-blue-400 text-xs">💎</span>
             </h1>
         </div>
 
@@ -73,10 +110,10 @@ const HomePage = () => {
                     </div>
                 </div>
                 <div className="flex flex-col gap-2">
-                    <PlayButton icon="fa-stopwatch" label="Play 10 min" isMain={true} onClick={() => navigate('/play')} />
-                    <PlayButton icon="fa-hand-pointer" label="New Game" />
-                    <PlayButton icon="fa-robot" label="Play Bots" />
-                    <PlayButton icon="fa-handshake" label="Play a Friend" />
+                    <PlayButton iconSrc="/assets/icons/rapid.svg" label="Play 10 min" isMain={true} onClick={() => navigate('/play')} />
+                    <PlayButton iconSrc="/assets/logos/play.png" label="New Game" />
+                    <PlayButton iconSrc="/assets/moves/device-bot.svg" label="Play Bots" />
+                    <PlayButton iconSrc="/assets/icons/handshake.svg" label="Play a Friend" />
                 </div>
             </div>
 

@@ -12,7 +12,7 @@ const ProfilePage = ({ archiveMode = false }) => {
     const { username: urlUsername } = useParams();
     const navigate = useNavigate();
 
-    const [user, setUser] = useState({ username: '', email: '', provider: '', bio: '', about_me: '', joined: 'Apr 8, 2026' });
+    const [user, setUser] = useState({ username: '', email: '', provider: '', bio: '', about_me: '', avatar_url: '', joined: 'Apr 8, 2026' });
     const [history, setHistory] = useState([]);
     const [historyTotal, setHistoryTotal] = useState(0);
     const [isHistoryLoading, setIsHistoryLoading] = useState(false);

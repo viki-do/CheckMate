@@ -33,6 +33,8 @@ class User(Base):
     about_me = Column(Text, nullable=True)
     first_name = Column(String(100), nullable=True)
     last_name = Column(String(100), nullable=True)
+    avatar_url = Column(String(512), nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
     
 class Game(Base):
     __tablename__ = "games"

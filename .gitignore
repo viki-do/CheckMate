@@ -16,6 +16,7 @@ backend/*.sqlite3
 backend/.env
 backend/logs/
 backend/sync_chesscom_full_*.log
+backend/uploads/
 
 # Engine executable (Too large for GitHub)
 backend/engine/stockfish.exe

@@ -12,6 +12,7 @@ import AnalyzeBoard from './components/AnalyzeBoard';
 import PlaySelectionPanel from './components/PlaySelectionPanel';
 import BotSelectionOrGame from './components/BotSelectionOrGame';
 import SettingsProfilePage from './pages/SettingsProfilePage';
+import ChangeUsernamePage from './pages/ChangeUsernamePage';
 
 import { useChess } from './context/ChessContext';
 
@@ -94,6 +95,10 @@ const App = () => {
                         <Route
                             path="/settings/profile"
                             element={isAuthenticated ? <SettingsProfilePage /> : <Navigate to="/login" />}
+                        />
+                        <Route
+                            path="/settings/change-username"
+                            element={isAuthenticated ? <ChangeUsernamePage /> : <Navigate to="/login" />}
                         />
 
                         <Route 

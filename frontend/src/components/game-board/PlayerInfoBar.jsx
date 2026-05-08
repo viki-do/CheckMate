@@ -4,6 +4,7 @@ import GameClock from './GameClock';
 const PlayerInfoBar = ({
     type,
     userName,
+    userAvatarUrl,
     opponent,
     previewOpponent,
     material,
@@ -27,7 +28,19 @@ const PlayerInfoBar = ({
                         <i className="fas fa-robot text-[#808080] text-xl"></i>
                     )
                 ) : (
-                    <i className="fas fa-user text-[#808080] text-xl"></i>
+                    userAvatarUrl ? (
+                        <img
+                            src={userAvatarUrl}
+                            alt=""
+                            className="w-full h-full object-cover"
+                        />
+                    ) : (
+                        <img
+                            src="/assets/icons/noavatar.gif"
+                            alt=""
+                            className="w-full h-full object-cover opacity-55"
+                        />
+                    )
                 )}
             </div>
             <div className="flex flex-col justify-center">

@@ -48,9 +48,13 @@ export const StatListItem = ({ icon, label, value, color = "text-[#8b8987]", has
         </div>
     </div>
 );
-export const PlayButton = ({ icon, label, onClick, isMain }) => (
+export const PlayButton = ({ icon, iconSrc, label, onClick, isMain }) => (
     <button onClick={onClick} className="flex items-center gap-4 px-5 h-[79px] rounded-lg bg-[#262421] hover:bg-[#2b2926] border border-[#3c3a37] transition-all group w-full">
-        <i className={`fas ${icon} text-2xl ${isMain ? 'text-[#81b64c]' : 'text-[#8b8987] group-hover:text-white'}`}></i>
+        {iconSrc ? (
+            <img src={iconSrc} alt="" className={`w-8 h-8 object-contain ${isMain ? '' : 'opacity-75 group-hover:opacity-100'}`} />
+        ) : (
+            <i className={`fas ${icon} text-2xl ${isMain ? 'text-[#81b64c]' : 'text-[#8b8987] group-hover:text-white'}`}></i>
+        )}
         <span className="font-bold text-white text-[15px]">{label}</span>
     </button>
 );

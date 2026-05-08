@@ -3,6 +3,7 @@ import socketio
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
 import models
@@ -12,6 +13,8 @@ from sqlalchemy import text
 
 load_dotenv()
 SECRET_KEY = os.getenv("SECRET_KEY")
+UPLOAD_ROOT = os.path.join(os.path.dirname(__file__), "uploads")
+os.makedirs(os.path.join(UPLOAD_ROOT, "avatars"), exist_ok=True)
 
 # Adatbázis táblák létrehozása
 models.Base.metadata.create_all(bind=engine)
@@ -21,6 +24,8 @@ with engine.begin() as conn:
     conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS about_me TEXT"))
     conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS first_name VARCHAR(100)"))
     conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_name VARCHAR(100)"))
+    conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url VARCHAR(512)"))
+    conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT now()"))
     conn.execute(text("ALTER TABLE games ADD COLUMN IF NOT EXISTS white_accuracy FLOAT"))
     conn.execute(text("ALTER TABLE games ADD COLUMN IF NOT EXISTS black_accuracy FLOAT"))
     conn.execute(text("ALTER TABLE imported_games ADD COLUMN IF NOT EXISTS pgn_object_key VARCHAR(512)"))
@@ -47,6 +52,7 @@ sio = socketio.AsyncServer(
 
 # 2. Létrehozzuk a FastAPI appot
 app = FastAPI(title="Checkmate.com API")
+app.mount("/uploads", StaticFiles(directory=UPLOAD_ROOT), name="uploads")
 
 
 # --- MIDDLEWARE-EK ---
