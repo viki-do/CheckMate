@@ -6,7 +6,7 @@ import { ControlBtn } from '../component_helpers/AnalysisHelpers';
 import { ChevronLeft, ChevronRight, New, ResetArrow } from '../icons/Icons';
 import CapturedProgressBar from '../game-board/CapturedProgressBar';
 import { useChess } from '../../context/ChessContext';
-import { getMoveSoundName } from '../../hooks/chess-game/soundUtils';
+import { getReplayPositionSoundName } from '../../hooks/chess-game/soundUtils';
 import { MoveNotation } from '../move-list/MoveNotation';
 import { CapturedRow } from '../MaterialAdvantage';
 import { getCapturedPieces, getMaterialDiff } from '../materialUtils';
@@ -187,9 +187,7 @@ const DatabaseGameViewer = ({ game }) => {
   };
 
   const playReplaySound = (nextIndex) => {
-    if (nextIndex <= 0 || nextIndex === moveIndex) return;
-    const move = replay.history[nextIndex - 1];
-    const soundName = getMoveSoundName(move?.m);
+    const soundName = getReplayPositionSoundName(replay.history, moveIndex, nextIndex);
     if (soundName) playSound(soundName);
   };
 

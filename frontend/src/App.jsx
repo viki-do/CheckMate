@@ -65,6 +65,12 @@ const App = () => {
                             {/* A /play/bots útvonalon dől el: botlista VAGY aktív játék */}
                             <Route path="bots" element={<BotSelectionOrGame />} />
                         </Route>
+                        <Route
+                            path="/play/archive/:archiveGameId"
+                            element={isAuthenticated ? <GameBoard /> : <Navigate to="/login" />}
+                        >
+                            <Route index element={<BotSelectionOrGame />} />
+                        </Route>
 
                         <Route 
                             path="/analysis" 

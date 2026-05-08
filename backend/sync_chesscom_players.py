@@ -16,14 +16,12 @@ import models
 from database import SessionLocal, engine
 from routers.pgn_importer import import_pgn_stream
 from routers.r2_storage import r2_object_exists, upload_fileobj_to_r2
-from services.historical_players import HISTORICAL_PLAYERS
 from services.import_stats import ensure_import_stat_tables, refresh_import_stats
 
 
 CHESSCOM_API = "https://api.chess.com/pub"
 DEFAULT_PLAYERS_FILE = BACKEND_DIR / "data" / "tracked_chesscom_players.json"
 USER_AGENT = "CheckmateChessDatabase/1.0 (contact: local-dev)"
-CURATED_PLAYER_NAMES = {player["name"] for player in HISTORICAL_PLAYERS}
 NETWORK_RETRIES = 3
 RETRY_DELAY_SECONDS = 3
 
@@ -123,6 +121,10 @@ def sync_month(db, username, archive_url, skip_r2=False, force=False, dry_run=Fa
     record = get_import_record(db, object_key)
 
     if not force and record and record.status == "complete" and indexed_count > 0:
+        if not skip_r2 and not r2_object_exists(object_key):
+            pgn_text = get_text(f"{archive_url}/pgn")
+            upload_fileobj_to_r2(io.BytesIO(pgn_text.encode("utf-8")), object_key)
+            return {"status": "uploaded-r2", "object_key": object_key, "imported": 0, "duplicates": 0}
         return {"status": "skipped", "object_key": object_key, "imported": 0, "duplicates": 0}
 
     pgn_url = f"{archive_url}/pgn"
@@ -157,7 +159,6 @@ def sync_month(db, username, archive_url, skip_r2=False, force=False, dry_run=Fa
             pgn_object_key=object_key,
             batch_size=500,
             dedupe_by_site=True,
-            allowed_player_names=CURATED_PLAYER_NAMES,
         )
 
         record.status = "complete"
@@ -265,7 +266,7 @@ def main():
                             total_upload_skipped += 1
                         else:
                             total_skipped += 1
-                    if result.get("status") == "uploaded":
+                    if result.get("status") in {"uploaded", "uploaded-r2"}:
                         total_uploaded += 1
                 except (HTTPError, URLError, TimeoutError) as exc:
                     print(f"    HTTP error: {exc}", flush=True)

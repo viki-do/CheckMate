@@ -1,4 +1,6 @@
 import GameHistoryTypeIcon from "../game-history/GameHistoryTypeIcon";
+import ReviewAccuracyButton from "../game-history/ReviewAccuracyButton";
+import { useNavigate } from "react-router-dom";
 
 const PlayerLine = ({ player, isWhite, won }) => (
     <div className="flex items-center gap-2">
@@ -11,15 +13,20 @@ const PlayerLine = ({ player, isWhite, won }) => (
 );
 
 const GameArchiveRow = ({ game, username }) => {
+    const navigate = useNavigate();
     const whiteWon = game.result === "1-0";
     const blackWon = game.result === "0-1";
     const isDraw = game.result === "1/2-1/2";
     const isOngoing = game.result === "*";
+    const hasAccuracy = Array.isArray(game.accuracy);
     const whitePlayer = game.iWasWhite ? { name: username || "Viki", elo: game.myElo, isMe: true } : { name: game.opponent, elo: game.elo, isMe: false };
     const blackPlayer = !game.iWasWhite ? { name: username || "Viki", elo: game.myElo, isMe: true } : { name: game.opponent, elo: game.elo, isMe: false };
 
     return (
-        <tr className="hover:bg-[#2b2926] transition-colors cursor-pointer group h-[85px]">
+        <tr
+            className="hover:bg-[#2b2926] transition-colors cursor-pointer group h-[85px]"
+            onClick={() => navigate(`/play/archive/${game.id}`)}
+        >
             <td className="px-4 py-2 text-center align-middle">
                 <GameHistoryTypeIcon game={game} size={24} />
             </td>
@@ -44,15 +51,25 @@ const GameArchiveRow = ({ game, username }) => {
             </td>
 
             <td className="px-4 py-2 text-center">
-                <div className="flex flex-col text-[12px] font-bold leading-tight items-center">
-                    <span className="text-[#8b8987]">{Array.isArray(game.accuracy) ? game.accuracy[0] : '-'}</span>
-                    <span className="text-white">{Array.isArray(game.accuracy) ? game.accuracy[1] : '-'}</span>
-                </div>
+                {hasAccuracy ? (
+                    <div className="flex flex-col text-[12px] font-bold leading-tight items-center">
+                        <span className="text-[#8b8987]">{game.accuracy[0] ?? '-'}</span>
+                        <span className="text-white">{game.accuracy[1] ?? '-'}</span>
+                    </div>
+                ) : (
+                    <ReviewAccuracyButton gameId={game.id} onReview={(id) => navigate(`/play/archive/${id}`)} />
+                )}
             </td>
 
             <td className="px-4 py-2 text-center text-white font-medium text-[13px]">{game.moves ?? '-'}</td>
             <td className="px-4 py-2 text-right text-white text-[13px] whitespace-nowrap font-medium">{game.date || '-'}</td>
-            <td className="px-4 py-2 text-center"><input type="checkbox" className="accent-[#81b64c]" /></td>
+            <td className="px-4 py-2 text-center">
+                <input
+                    type="checkbox"
+                    className="accent-[#81b64c]"
+                    onClick={(event) => event.stopPropagation()}
+                />
+            </td>
         </tr>
     );
 };

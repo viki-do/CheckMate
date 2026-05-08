@@ -12,7 +12,7 @@ import {
     mergeServerHistoryWithLocalTimes,
 } from './chess-game/historyUtils';
 import { getTimeCategory, parseTimeControl } from './chess-game/timeControl';
-import { getMoveAttemptSoundName, getMoveSoundName, renderNotationText } from './chess-game/soundUtils';
+import { getHistoryNavigationSoundName, getMoveAttemptSoundName, getMoveSoundName, renderNotationText } from './chess-game/soundUtils';
 
 const MOVE_COMMIT_DELAY_MS = 100;
 
@@ -344,18 +344,18 @@ const initializeGame = useCallback(async () => {
 
     const goToMove = useCallback((index) => {
         setSelectedSquare(null);
-        const playNavSound = (notation) => {
-            if (!notation || notation === "start") return;
-            playBotMoveSound(notation);
+        const playNavSound = (nextIndex) => {
+            const soundName = getHistoryNavigationSoundName(history, viewIndex, nextIndex);
+            if (soundName) playSound(soundName);
         };
 
         if (index === -1 || index >= history.length - 1) {
+            playNavSound(-1);
             setViewIndex(-1);
             const latest = history[history.length - 1];
             if (latest) {
                 setFen(latest.fen);
                 setLastMove({ from: latest.from, to: latest.to });
-                playNavSound(latest.m);
             }
             return;
         }
@@ -364,9 +364,9 @@ const initializeGame = useCallback(async () => {
             setFen(move.fen);
             setLastMove({ from: move.from, to: move.to });
             setViewIndex(index);
-            playNavSound(move.m);
+            playNavSound(index);
         }
-    }, [history, playBotMoveSound]);
+    }, [history, viewIndex, playSound]);
 
     const processNextPremove = useCallback((currentFen = fenRef.current) => {
         if (isExecutingPremoveRef.current || status !== "ongoing") return;

@@ -118,15 +118,11 @@ def placeholders(prefix: str, values):
     return ", ".join(f":{prefix}_{index}" for index in range(len(values)))
 
 
-def curated_player_game_clause(player_variants, all_catalog_variants):
+def player_game_clause(player_variants):
     player_sql = placeholders("player", player_variants)
-    catalog_sql = placeholders("catalog", all_catalog_variants)
     white = sql_player_name("white")
     black = sql_player_name("black")
-    return (
-        f"(({white} IN ({player_sql}) AND {black} IN ({catalog_sql})) "
-        f"OR ({black} IN ({player_sql}) AND {white} IN ({catalog_sql})))"
-    )
+    return f"({white} IN ({player_sql}) OR {black} IN ({player_sql}))"
 
 
 def serialize_game_row(row):
@@ -266,6 +262,7 @@ def import_pgn(
 
     try:
         upload_fileobj_to_r2(file.file, object_key, file.content_type or "application/x-chess-pgn")
+        file.file.seek(0)
 
         result = import_pgn_stream(file.file, db, pgn_object_key=object_key)
         imported = result["imported"]
@@ -336,15 +333,11 @@ def player_profile(
     db: Session = Depends(get_db),
 ):
     canonical_name, variants = get_catalog_variants_for_name(name)
-    all_catalog_variants = get_all_catalog_variants()
-    if not variants or not all_catalog_variants:
+    if not variants:
         raise HTTPException(status_code=400, detail="Missing player name")
 
-    query_params = {
-        **bind_values("player", variants),
-        **bind_values("catalog", all_catalog_variants),
-    }
-    where_clause = curated_player_game_clause(variants, all_catalog_variants)
+    query_params = bind_values("player", variants)
+    where_clause = player_game_clause(variants)
     white_name = sql_player_name("white")
     black_name = sql_player_name("black")
     player_sql = placeholders("player", variants)
@@ -411,12 +404,8 @@ def games(
     try:
         if player1.strip() and not player2.strip() and not opening.strip():
             _, variants = get_catalog_variants_for_name(player1)
-            all_catalog_variants = get_all_catalog_variants()
-            query_params = {
-                **bind_values("player", variants),
-                **bind_values("catalog", all_catalog_variants),
-            }
-            where_clause = curated_player_game_clause(variants, all_catalog_variants)
+            query_params = bind_values("player", variants)
+            where_clause = player_game_clause(variants)
 
             total = int(db.execute(text(f"""
                 SELECT COUNT(*)
@@ -566,9 +555,6 @@ def get_players(db: Session, page: int = 1, page_size: int = 24, search: str = "
     if not catalog_players:
         return {"players": [], "total": 0, "page": page, "page_size": page_size}
 
-    all_catalog_variants = get_all_catalog_variants()
-    catalog_params = bind_values("catalog", all_catalog_variants)
-    catalog_sql = placeholders("catalog", all_catalog_variants)
     white = sql_player_name("white")
     black = sql_player_name("black")
     players_with_counts = []
@@ -580,9 +566,8 @@ def get_players(db: Session, page: int = 1, page_size: int = 24, search: str = "
         games = int(db.execute(text(f"""
             SELECT COUNT(*)
             FROM imported_games
-            WHERE (({white} IN ({player_sql}) AND {black} IN ({catalog_sql}))
-                OR ({black} IN ({player_sql}) AND {white} IN ({catalog_sql})))
-        """), {**player_params, **catalog_params}).scalar() or 0)
+            WHERE {white} IN ({player_sql}) OR {black} IN ({player_sql})
+        """), player_params).scalar() or 0)
         players_with_counts.append({"name": player_name, "games": games})
 
     if sort == "games":

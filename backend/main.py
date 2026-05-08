@@ -21,6 +21,8 @@ with engine.begin() as conn:
     conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS about_me TEXT"))
     conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS first_name VARCHAR(100)"))
     conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_name VARCHAR(100)"))
+    conn.execute(text("ALTER TABLE games ADD COLUMN IF NOT EXISTS white_accuracy FLOAT"))
+    conn.execute(text("ALTER TABLE games ADD COLUMN IF NOT EXISTS black_accuracy FLOAT"))
     conn.execute(text("ALTER TABLE imported_games ADD COLUMN IF NOT EXISTS pgn_object_key VARCHAR(512)"))
     conn.execute(text("ALTER TABLE imported_games ADD COLUMN IF NOT EXISTS white_elo INTEGER"))
     conn.execute(text("ALTER TABLE imported_games ADD COLUMN IF NOT EXISTS black_elo INTEGER"))

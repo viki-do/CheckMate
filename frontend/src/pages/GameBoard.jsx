@@ -1,5 +1,5 @@
 import React, { useEffect, useCallback, useState } from 'react';
-import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Outlet, useLocation, useNavigate, useParams } from 'react-router-dom';
 // JAVÍTÁS: useChessGame helyett useChess Context importálása
 import { useChess } from '../context/ChessContext';
 import axios from 'axios';
@@ -9,6 +9,7 @@ import CapturedProgressBar from '../components/game-board/CapturedProgressBar.js
 import ChessBoardArea from '../components/game-board/ChessBoardArea.jsx';
 import PlayerInfoBar from '../components/game-board/PlayerInfoBar.jsx';
 import { findBotByGameData } from '../components/game-board/gameBoardUtils.js';
+import { getHistoryNavigationSoundName } from '../hooks/chess-game/soundUtils';
 
 const GameBoard = () => {
     
@@ -33,6 +34,7 @@ const GameBoard = () => {
     const gameLogic = useChess(); 
     const navigate = useNavigate();
     const location = useLocation();
+    const { archiveGameId } = useParams();
 
     const {
         status, history, viewIndex, startNewGame,
@@ -73,8 +75,43 @@ const GameBoard = () => {
     }, []);
 
     useEffect(() => {
-    initializeGame();
-    }, [initializeGame]);
+    if (!archiveGameId) {
+        initializeGame();
+    }
+    }, [initializeGame, archiveGameId]);
+
+    useEffect(() => {
+        if (!archiveGameId || gameLogic.isLoading) return;
+
+        let isMounted = true;
+        const loadArchivedGame = async () => {
+            setAnalysisData(null);
+            setIsAnalyzing(false);
+            setIsGameActiveUI(true);
+            setDelayedShowPopup(false);
+            setIsPopupClosed(true);
+            gameLogic.setGameId(archiveGameId);
+            localStorage.removeItem('chessGameId');
+
+            const data = await gameLogic.fetchGameState(archiveGameId);
+            if (!isMounted || !data) return;
+
+            setIsFlipped(data.player_color === 'black');
+            setOpponent(findBotByGameData(data));
+            setPreviewOpponent(null);
+            if (data.white_accuracy != null || data.black_accuracy != null) {
+                const playerAccuracy = data.player_color === 'black' ? data.black_accuracy : data.white_accuracy;
+                setAnalysisData({
+                    overall_accuracy: playerAccuracy ?? data.white_accuracy ?? data.black_accuracy,
+                    white_accuracy: data.white_accuracy,
+                    black_accuracy: data.black_accuracy,
+                });
+            }
+        };
+
+        loadArchivedGame();
+        return () => { isMounted = false; };
+    }, [archiveGameId, gameLogic.isLoading, gameLogic.fetchGameState, gameLogic.setGameId, setIsFlipped]);
 
 // GameBoard.jsx - Az összes UI és Reset logika egyben (JAVÍTOTT)
     useEffect(() => {
@@ -104,7 +141,7 @@ const GameBoard = () => {
          * CSAK AKKOR takarítunk, ha a /play oldalon vagyunk, 
          * NINCS aktív játék, ÉS nem éppen most indítunk egy újat (isStarting)!
          */
-        else if (location.pathname === '/play' && !isStarting) {
+        else if (location.pathname === '/play' && !isStarting && !archiveGameId) {
             setIsGameActiveUI(false);
             setOpponent(null);
             setPreviewOpponent(null);
@@ -117,7 +154,7 @@ const GameBoard = () => {
 
     handleStateSync();
     // Hozzáadtuk az isStarting-ot a függőségi listához is!
-    }, [gameLogic.isLoading, gameLogic.gameId, gameLogic.status, location.pathname, isStarting]);
+    }, [gameLogic.isLoading, gameLogic.gameId, gameLogic.status, location.pathname, isStarting, archiveGameId]);
 
     const handleSelectionColorChange = (color) => {
         if (color === 'random') {
@@ -252,7 +289,7 @@ const GameBoard = () => {
     useEffect(() => {
         let timer;
         // Csak akkor indítjuk a timert, ha vége a játéknak ÉS még nem zárták be kézzel
-        if (status !== "ongoing" && status !== "" && isGameActive) {
+        if (status !== "ongoing" && status !== "" && isGameActive && !archiveGameId) {
             if (!isPopupClosed) {
                 timer = setTimeout(() => {
                     setDelayedShowPopup(true);
@@ -267,34 +304,29 @@ const GameBoard = () => {
         }
 
         return () => { if (timer) clearTimeout(timer); };
-    }, [status, isGameActive, isPopupClosed]);
+    }, [status, isGameActive, isPopupClosed, archiveGameId]);
 
     const goToMove = useCallback((index, isWhiteOnly = false) => {
         setSelectedSquare(null);
-        const playNavSound = (notation) => {
-            if (!notation || notation === "start") return;
-            if (notation.includes('#')) playSound('checkmate');
-            else if (notation.includes('=')) playSound('promote');
-            else if (notation.includes('O-O')) playSound('castle');
-            else if (notation.includes('+')) playSound('move-check');
-            else if (notation.includes('x')) playSound('capture');
-            else playSound('move');
+        const playNavSound = (nextIndex) => {
+            const soundName = getHistoryNavigationSoundName(history, viewIndex, nextIndex);
+            if (soundName) playSound(soundName);
         };
 
         if (index === -1 || index >= history.length - 1) {
+            playNavSound(-1);
             setViewIndex(-1);
             const latest = history[history.length - 1];
             if (latest) {
                 setFen(latest.fen);
                 setLastMove({ from: latest.from, to: latest.to });
-                playNavSound(latest.m);
             }
             return;
         }
 
         const move = history[index];
         if (!move) return;
-        playNavSound(move.m);
+        playNavSound(index);
         if (isWhiteOnly) {
             const tempChess = new Chess(move.fen);
             const undone = tempChess.undo();
@@ -308,7 +340,7 @@ const GameBoard = () => {
             setLastMove({ from: move.from, to: move.to });
             setViewIndex(index);
         }
-    }, [history, setFen, setLastMove, setViewIndex, setSelectedSquare, playSound]);
+    }, [history, viewIndex, setFen, setLastMove, setViewIndex, setSelectedSquare, playSound]);
 
     useEffect(() => {
         const handleKeyDown = (e) => {
@@ -398,8 +430,10 @@ const GameBoard = () => {
     const bottomClockSeconds = isGameActiveUI
         ? (isFlipped ? getDisplayTime('b') : getDisplayTime('w'))
         : selectedBaseTime;
-    const shouldShowDefaultBoard = location.pathname === '/play' ||
-        (location.pathname === '/play/bots' && !isGameActiveUI);
+    const shouldShowDefaultBoard = !archiveGameId && (
+        location.pathname === '/play' ||
+        (location.pathname === '/play/bots' && !isGameActiveUI)
+    );
     const boardGameLogic = shouldShowDefaultBoard
         ? {
             ...gameLogic,

@@ -210,10 +210,10 @@ const Navbar = () => {
             </nav>
 
             {/* Footer Buttons */}
-            <div className="mt-auto flex items-center justify-between gap-2 px-2 pt-4 border-t border-[#3c3a37]">
+            <div className="mt-auto flex flex-col gap-2 px-2 pt-4 border-t border-[#3c3a37]">
                 <div
                     onClick={() => navigate(`/member/${username}`)}
-                    className={`min-w-0 flex-1 flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-all ${location.pathname.startsWith('/member') ? 'bg-[#312e2b] text-white' : 'text-[#bab9b8] hover:bg-[#312e2b] hover:text-white'}`}
+                    className={`w-full min-w-0 flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-all ${location.pathname.startsWith('/member') ? 'bg-[#312e2b] text-white' : 'text-[#bab9b8] hover:bg-[#312e2b] hover:text-white'}`}
                 >
                     <div className="w-6 h-6 rounded flex justify-center items-center overflow-hidden">
                         <ImageIcon src="/assets/icons/noavatar.gif" alt="Profile" className="w-6 h-6" />
@@ -222,9 +222,10 @@ const Navbar = () => {
                 </div>
                 <button
                     onClick={handleLogout}
-                    className="flex items-center justify-center px-3 py-2 text-[#bab9b8] hover:bg-[#312e2b] rounded-lg transition-all cursor-pointer"
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2 text-[#bab9b8] hover:bg-[#312e2b] hover:text-white rounded-lg transition-all cursor-pointer"
                     title="Logout"
                 >
+                    <span className="text-sm font-bold">Log Out</span>
                     <ImageIcon src="/assets/logos/logout.svg" alt="Logout" className="w-5 h-5" />
                 </button>
             </div>

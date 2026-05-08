@@ -68,6 +68,10 @@ def analyze_full_game(game_id: str, user_id: str = Depends(get_current_user_id),
         "middlegame": {"losses": [], "p_befores": [], "counts": {}},
         "endgame": {"losses": [], "p_befores": [], "counts": {}}
     }
+    side_stats = {
+        "white": {"losses": [], "p_befores": []},
+        "black": {"losses": [], "p_befores": []},
+    }
     
     prev_eval = 30 
     
@@ -122,6 +126,14 @@ def analyze_full_game(game_id: str, user_id: str = Depends(get_current_user_id),
         phase_stats[current_phase]["losses"].append(loss)
         phase_stats[current_phase]["p_befores"].append(p_before)
         phase_stats[current_phase]["counts"][label] = phase_stats[current_phase]["counts"].get(label, 0) + 1
+        side_key = "white" if is_white_turn else "black"
+        side_stats[side_key]["losses"].append(loss)
+        side_stats[side_key]["p_befores"].append(p_before)
+        best_move = analysis[0]["pv"][0] if analysis[0].get("pv") else None
+        m.accuracy_label = label.lower()
+        m.evaluation = move_eval / 100.0 if abs(move_eval) < 5000 else None
+        m.best_move_uci = best_move.uci() if best_move else None
+        m.win_chance_drop = loss
 
         # JSON elem hozzáadása
         full_analysis.append({
@@ -130,7 +142,7 @@ def analyze_full_game(game_id: str, user_id: str = Depends(get_current_user_id),
             "label": label,
             "is_book": is_book,
             "eval": move_eval / 100.0 if abs(move_eval) < 5000 else f"M{int((10000-abs(move_eval))/100)}",
-            "best_move": board.san(analysis[0]["pv"][0]),
+            "best_move": board.san(best_move) if best_move else "",
             "engine_lines": engine_lines,
             "phase": current_phase,
             "opening_name": book_info["name"] if is_book else None
@@ -161,10 +173,17 @@ def analyze_full_game(game_id: str, user_id: str = Depends(get_current_user_id),
             }
 
     overall_accuracy = coach.calculate_accuracy(all_losses, all_p_befores)
+    white_accuracy = coach.calculate_accuracy(side_stats["white"]["losses"], side_stats["white"]["p_befores"]) if side_stats["white"]["losses"] else None
+    black_accuracy = coach.calculate_accuracy(side_stats["black"]["losses"], side_stats["black"]["p_befores"]) if side_stats["black"]["losses"] else None
+    game.white_accuracy = white_accuracy
+    game.black_accuracy = black_accuracy
+    db.commit()
 
     return {
         "game_id": game_id,
         "overall_accuracy": overall_accuracy,
+        "white_accuracy": white_accuracy,
+        "black_accuracy": black_accuracy,
         "summary": summary,
         "analysis": full_analysis,
         "player_color": game.player_color,
@@ -911,7 +930,10 @@ def get_game_history(game_id: str, db: Session = Depends(get_db)):
                     "fen": board.fen(), 
                     "from": chess.square_name(mv.from_square), 
                     "to": chess.square_name(mv.to_square),
-                    "t": round(duration, 1) 
+                    "t": round(duration, 1),
+                    "analysisLabel": m.accuracy_label,
+                    "eval": m.evaluation,
+                    "bestMove": m.best_move_uci,
                 })
             except:
                 continue
@@ -948,7 +970,13 @@ def get_game_history(game_id: str, db: Session = Depends(get_db)):
             "reason": reason,
             "opening": opening_data,
             "base_time_sec": game.base_time_sec,
-            "time_category": game.time_category.value if game.time_category else None
+            "time_category": game.time_category.value if game.time_category else None,
+            "player_color": game.player_color,
+            "bot_id": game.bot_id,
+            "bot_elo": game.bot_elo,
+            "bot_style": game.bot_style,
+            "white_accuracy": game.white_accuracy,
+            "black_accuracy": game.black_accuracy,
         }
 
     except Exception as e:
@@ -1098,7 +1126,13 @@ async def offer_draw(request: Request, data: dict, user_id: str = Depends(get_cu
 @router.get("/get-latest-review-game")
 def get_latest_review_game(user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
     latest_game = db.query(models.Game)\
-        .filter((models.Game.white_player_id == user_id) | (models.Game.black_player_id == user_id))\
+        .filter(
+            (models.Game.white_player_id == user_id) | (models.Game.black_player_id == user_id),
+            models.Game.status != models.GameStatus.ongoing,
+            models.Game.status != models.GameStatus.aborted,
+            models.Game.white_accuracy.is_(None),
+            models.Game.black_accuracy.is_(None),
+        )\
         .order_by(models.Game.created_at.desc())\
         .first()
     
@@ -1163,6 +1197,11 @@ def get_user_games(username: str, offset: int = 0, limit: int = 10, db: Session 
 
         return "1-0" if winner_is_white else "0-1"
 
+    def format_accuracy(value):
+        if value is None:
+            return None
+        return f"{float(value):.1f}"
+
     serialized_games = []
     for game in games:
         moves = db.query(models.Move)\
@@ -1195,7 +1234,12 @@ def get_user_games(username: str, offset: int = 0, limit: int = 10, db: Session 
             "elo": game.bot_elo,
             "myElo": None,
             "result": result,
-            "accuracy": None,
+            "accuracy": [
+                format_accuracy(game.white_accuracy),
+                format_accuracy(game.black_accuracy),
+            ] if game.white_accuracy is not None or game.black_accuracy is not None else None,
+            "myAccuracy": format_accuracy(game.white_accuracy if i_was_white else game.black_accuracy),
+            "opponentAccuracy": format_accuracy(game.black_accuracy if i_was_white else game.white_accuracy),
             "moves": (len(moves) + 1) // 2,
             "date": format_game_date(game.created_at),
             "win": user_won,

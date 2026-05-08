@@ -49,6 +49,8 @@ class Game(Base):
     bot_id = Column(String, nullable=True)    
     bot_style = Column(String, default="mix")  
     player_color = Column(String, default="white")
+    white_accuracy = Column(Float, nullable=True)
+    black_accuracy = Column(Float, nullable=True)
 
 
 class Move(Base):

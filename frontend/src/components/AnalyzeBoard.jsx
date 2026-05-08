@@ -18,6 +18,7 @@ import {
     getResultLabel,
     getSandboxGameState,
 } from './analyze-board/analyzeBoardUtils';
+import { getHistoryNavigationSoundName } from '../hooks/chess-game/soundUtils';
 
 const parseMasterGameHistory = (game) => {
     let chess = new Chess();
@@ -693,6 +694,8 @@ const handleExternalDrop = (e, row, col) => {
                 openingName={openingName}
                 viewIndex={viewIndex}
                 onViewMove={(idx) => {
+                    const soundName = getHistoryNavigationSoundName(sandboxHistory, viewIndex, idx);
+                    if (soundName) playSound(soundName);
                     const move = sandboxHistory[idx];
                     if (move) {
                         setSandboxFen(move.fen);

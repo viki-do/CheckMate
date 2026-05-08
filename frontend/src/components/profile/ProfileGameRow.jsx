@@ -1,4 +1,6 @@
 import GameHistoryTypeIcon from "../game-history/GameHistoryTypeIcon";
+import ReviewAccuracyButton from "../game-history/ReviewAccuracyButton";
+import { useNavigate } from "react-router-dom";
 
 const PlayerLine = ({ player, won, isWhite }) => (
     <div className="flex items-center gap-2">
@@ -10,10 +12,12 @@ const PlayerLine = ({ player, won, isWhite }) => (
 );
 
 const ProfileGameRow = ({ game, username }) => {
+    const navigate = useNavigate();
     const whiteWon = game.result === "1-0";
     const blackWon = game.result === "0-1";
     const isDraw = game.result === "1/2-1/2";
     const isOngoing = game.result === "*";
+    const hasAccuracy = Array.isArray(game.accuracy);
     const whiteScore = whiteWon ? '1' : isDraw ? '1/2' : '0';
     const blackScore = blackWon ? '1' : isDraw ? '1/2' : '0';
     const whitePlayer = game.iWasWhite ? { name: username, elo: game.myElo, isMe: true } : { name: game.opponent, elo: game.elo, isMe: false };
@@ -22,7 +26,10 @@ const ProfileGameRow = ({ game, username }) => {
     const resultIcon = isDraw || isOngoing ? 'fa-equals' : game.win ? 'fa-plus' : 'fa-minus';
 
     return (
-        <tr className="hover:bg-[#2b2926] transition-colors cursor-pointer group h-[60px]">
+        <tr
+            className="hover:bg-[#2b2926] transition-colors cursor-pointer group h-[60px]"
+            onClick={() => navigate(`/play/archive/${game.id}`)}
+        >
             <td className="px-4 py-2 w-16 text-center">
                 <GameHistoryTypeIcon game={game} size={24} />
             </td>
@@ -44,15 +51,23 @@ const ProfileGameRow = ({ game, username }) => {
                 </div>
             </td>
             <td className="px-4 py-2 w-20 text-center">
-                <div className="flex flex-col text-[11px] font-bold leading-none items-center gap-2">
-                    <span className="text-[#8b8987]">{Array.isArray(game.accuracy) ? game.accuracy[0] : '-'}</span>
-                    <span className="text-white">{Array.isArray(game.accuracy) ? game.accuracy[1] : '-'}</span>
-                </div>
+                {hasAccuracy ? (
+                    <div className="flex flex-col text-[11px] font-bold leading-none items-center gap-2">
+                        <span className="text-[#8b8987]">{game.accuracy[0] ?? '-'}</span>
+                        <span className="text-white">{game.accuracy[1] ?? '-'}</span>
+                    </div>
+                ) : (
+                    <ReviewAccuracyButton gameId={game.id} onReview={(id) => navigate(`/play/archive/${id}`)} />
+                )}
             </td>
             <td className="px-4 py-2 text-center text-white font-medium text-[13px]">{game.moves ?? '-'}</td>
             <td className="px-4 py-2 text-right text-[#bab9b8] text-[12px] whitespace-nowrap font-medium">{game.date || '-'}</td>
             <td className="px-4 py-2 w-10 text-center align-middle">
-                <input type="checkbox" className="w-4 h-4 rounded border-[#454241] bg-[#1e1e1e] accent-[#81b64c]" />
+                <input
+                    type="checkbox"
+                    className="w-4 h-4 rounded border-[#454241] bg-[#1e1e1e] accent-[#81b64c]"
+                    onClick={(event) => event.stopPropagation()}
+                />
             </td>
         </tr>
     );

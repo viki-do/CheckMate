@@ -5,6 +5,7 @@ import { HeaderSection, StatBar, StatListItem, PlayButton, BoardCard } from '../
 import React , { useMemo } from 'react';
 import { Chess } from 'chess.js';
 import GameHistoryTypeIcon from '../components/game-history/GameHistoryTypeIcon';
+import ReviewAccuracyButton from '../components/game-history/ReviewAccuracyButton';
 
 const HomePage = () => {
     const navigate = useNavigate();
@@ -121,8 +122,7 @@ const HomePage = () => {
                     label={reviewGame ? `Review vs ${reviewGame.opponent}` : "Play a game first"} 
                     onClick={() => {
                         if(reviewGame) {
-                            localStorage.setItem('chessGameId', reviewGame.game_id);
-                            navigate('/play');
+                            navigate(`/play/archive/${reviewGame.game_id}`);
                         } else {
                             navigate('/play');
                         }
@@ -173,6 +173,7 @@ const HomePage = () => {
                                 const blackWon = game.result === "0-1";
                                 const isDraw = game.result === "1/2-1/2";
                                 const isOngoing = game.result === "*";
+                                const hasAccuracy = Array.isArray(game.accuracy);
                                 
                                 // Pontos Ikon Logika a GameArchive alapján
 
@@ -185,7 +186,11 @@ const HomePage = () => {
                                     : { name: game.opponent, elo: game.elo, isMe: false };
 
                                 return (
-                                    <tr key={game.id} className="hover:bg-[#2b2926] transition-colors h-[70px] group">
+                                    <tr
+                                        key={game.id}
+                                        className="hover:bg-[#2b2926] transition-colors h-[70px] group cursor-pointer"
+                                        onClick={() => navigate(`/play/archive/${game.id}`)}
+                                    >
                                         {/* KATEGÓRIA IKON (Tűpontos Archive másolat) */}
                                         <td className="px-4 py-2 text-center align-middle">
                                             <GameHistoryTypeIcon game={game} size={24} />
@@ -226,10 +231,14 @@ const HomePage = () => {
 
                                         {/* Accuracy */}
                                         <td className="px-4 py-2 text-center">
-                                            <div className="flex flex-col text-[12px] font-bold leading-tight items-center">
-                                                <span className="text-[#8b8987]">{Array.isArray(game.accuracy) ? game.accuracy[0] : '-'}</span>
-                                                <span className="text-white">{Array.isArray(game.accuracy) ? game.accuracy[1] : '-'}</span>
-                                            </div>
+                                            {hasAccuracy ? (
+                                                <div className="flex flex-col text-[12px] font-bold leading-tight items-center">
+                                                    <span className="text-[#8b8987]">{game.accuracy[0] ?? '-'}</span>
+                                                    <span className="text-white">{game.accuracy[1] ?? '-'}</span>
+                                                </div>
+                                            ) : (
+                                                <ReviewAccuracyButton gameId={game.id} onReview={(id) => navigate(`/play/archive/${id}`)} />
+                                            )}
                                         </td>
 
                                         {/* Moves */}
