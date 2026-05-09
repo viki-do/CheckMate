@@ -1,4 +1,4 @@
-import { MoreHorizontal } from 'lucide-react';
+import { Download, MoreHorizontal } from 'lucide-react';
 import {
     ArrowChevronEnd,
     ChevronLeft,
@@ -10,7 +10,7 @@ import {
 } from '../icons/Icons';
 import { ControlBtn, FooterAction } from '../component_helpers/AnalysisHelpers';
 
-const AnalysisFooter = ({ history, viewIndex, onViewMove, onNewClick, onSaveClick, onReviewClick }) => (
+const AnalysisFooter = ({ history, viewIndex, onViewMove, onNewClick, onSaveClick, onReviewClick, onDownloadClick }) => (
     <div className="p-2 bg-[#21201d] rounded-b-lg border-t border-[#3c3a37] shrink-0">
         <div className="flex justify-between gap-1 mb-3 px-1 h-12">
             <ControlBtn icon={<ResetArrow size={20} />} onClick={() => onViewMove(0)} />
@@ -23,6 +23,7 @@ const AnalysisFooter = ({ history, viewIndex, onViewMove, onNewClick, onSaveClic
                 <FooterAction icon={<New size={20} />} label="New" onClick={onNewClick} />
                 <FooterAction icon={<Save size={20} />} label="Save" onClick={onSaveClick} />
                 <FooterAction icon={<Review size={20} />} label="Review" onClick={onReviewClick} />
+                <FooterAction icon={<Download size={20} />} label="CSV" onClick={onDownloadClick} />
                 <FooterAction icon={<MoreHorizontal size={20} />} label="" />
             </div>
         </div>

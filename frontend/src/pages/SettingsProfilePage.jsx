@@ -14,6 +14,8 @@ const sidebarItems = [
     { label: "Coach", icon: "fa-graduation-cap" },
     { label: "Notifications", icon: "fa-bell" },
     { label: "Account", Icon: PiecePawn },
+    { label: "Membership", icon: "fa-credit-card" },
+    { label: "Accessibility", icon: "fa-universal-access" },
 ];
 
 const SelectField = ({ value, options }) => (
@@ -253,6 +255,9 @@ const SettingsProfilePage = () => {
                             {sidebarItems.map((item) => (
                                 <button
                                     key={item.label}
+                                    onClick={() => {
+                                        if (item.label === "Account") navigate("/settings/account");
+                                    }}
                                     className={`h-[56px] px-7 flex items-center gap-3.5 text-left text-[15px] font-bold transition-colors relative ${item.active ? "bg-[#302f2c] text-white" : "text-[#d7d6d4] hover:bg-[#2c2b28]"}`}
                                 >
                                     {item.Icon ? (

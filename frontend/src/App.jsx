@@ -8,10 +8,12 @@ import Navbar from './components/Navbar';
 import HomePage from './pages/HomePage';
 import GameArchive from './pages/GameArchive';
 import GameDatabase from './pages/GameDatabase';
+import GameCollectionsPage from './pages/GameCollectionsPage';
 import AnalyzeBoard from './components/AnalyzeBoard';
 import PlaySelectionPanel from './components/PlaySelectionPanel';
 import BotSelectionOrGame from './components/BotSelectionOrGame';
 import SettingsProfilePage from './pages/SettingsProfilePage';
+import SettingsAccountPage from './pages/SettingsAccountPage';
 import ChangeUsernamePage from './pages/ChangeUsernamePage';
 
 import { useChess } from './context/ChessContext';
@@ -78,6 +80,10 @@ const App = () => {
                             element={isAuthenticated ? <AnalyzeBoard /> : <Navigate to="/login" />} 
                         />
                         <Route 
+                            path="/analysis/collections" 
+                            element={isAuthenticated ? <GameCollectionsPage /> : <Navigate to="/login" />} 
+                        />
+                        <Route 
                             path="/analysis/game/master/:gameId/review" 
                             element={isAuthenticated ? <AnalyzeBoard /> : <Navigate to="/login" />} 
                         />
@@ -95,6 +101,10 @@ const App = () => {
                         <Route
                             path="/settings/profile"
                             element={isAuthenticated ? <SettingsProfilePage /> : <Navigate to="/login" />}
+                        />
+                        <Route
+                            path="/settings/account"
+                            element={isAuthenticated ? <SettingsAccountPage /> : <Navigate to="/login" />}
                         />
                         <Route
                             path="/settings/change-username"

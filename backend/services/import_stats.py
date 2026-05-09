@@ -35,3 +35,6 @@ def refresh_import_stats(db):
         GROUP BY COALESCE(NULLIF(opening, ''), 'Unknown')
     """))
     db.commit()
+
+    from services.player_catalog import sync_player_catalog
+    sync_player_catalog(db)

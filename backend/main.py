@@ -10,6 +10,7 @@ import models
 from database import engine
 from routers import auth, game, database
 from sqlalchemy import text
+from services.player_catalog import sync_player_catalog
 
 load_dotenv()
 SECRET_KEY = os.getenv("SECRET_KEY")
@@ -42,6 +43,16 @@ with engine.begin() as conn:
     conn.execute(text("CREATE INDEX IF NOT EXISTS ix_imported_player_stats_games ON imported_player_stats (games DESC)"))
     conn.execute(text("CREATE TABLE IF NOT EXISTS imported_opening_stats (opening TEXT PRIMARY KEY, games INTEGER NOT NULL DEFAULT 0)"))
     conn.execute(text("CREATE INDEX IF NOT EXISTS ix_imported_opening_stats_games ON imported_opening_stats (games DESC)"))
+
+try:
+    from database import SessionLocal
+    db = SessionLocal()
+    try:
+        sync_player_catalog(db)
+    finally:
+        db.close()
+except Exception as exc:
+    print(f"Player catalog sync skipped: {exc}")
 
 # --- SOCKET.IO BEÁLLÍTÁSA ---
 # 1. Létrehozzuk az aszinkron Socket.io szervert

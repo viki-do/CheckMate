@@ -224,7 +224,7 @@ const Navbar = () => {
                                     />
                                 }
                                 label="Collections"
-                                onClick={() => navigate(`/games/archive/${username}`)}
+                                onClick={() => navigate('/analysis/collections')}
                             />
                             <DropdownItem
                                 icon={
@@ -249,11 +249,7 @@ const Navbar = () => {
                     className={`w-full min-w-0 flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-all ${location.pathname.startsWith('/member') ? 'bg-[#312e2b] text-white' : 'text-[#bab9b8] hover:bg-[#312e2b] hover:text-white'}`}
                 >
                     <div className="w-6 h-6 bg-[#3c3a37] rounded flex justify-center items-center overflow-hidden">
-                        {avatarUrl ? (
-                            <img src={getAvatarSrc(avatarUrl)} alt="Profile" className="w-full h-full object-cover" />
-                        ) : (
-                            <i className="fas fa-user text-white text-[12px]"></i>
-                        )}
+                        <img src={getAvatarSrc(avatarUrl)} alt="Profile" className="w-full h-full object-cover" />
                     </div>
                     <span className="text-sm font-semibold truncate">{username}</span>
                 </div>

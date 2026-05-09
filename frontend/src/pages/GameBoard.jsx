@@ -11,6 +11,8 @@ import PlayerInfoBar from '../components/game-board/PlayerInfoBar.jsx';
 import { findBotByGameData } from '../components/game-board/gameBoardUtils.js';
 import { getHistoryNavigationSoundName } from '../hooks/chess-game/soundUtils';
 
+const DEFAULT_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+
 const GameBoard = () => {
     
     // --- 1. MINDEN STATE DEKLARÁCIÓ AZ ELEJÉRE ---
@@ -50,10 +52,17 @@ const GameBoard = () => {
     // --- ÚJ FÜGGVÉNYEK ---
 
     const isGameActive = !!gameId && gameId !== "null";
-    const captured = getCapturedPieces(fen);
+    const shouldShowDefaultBoard = !archiveGameId && (
+        location.pathname === '/play' ||
+        (location.pathname === '/play/bots' && !isGameActiveUI)
+    );
+    const defaultBoardIsFlipped = location.pathname === '/play/bots' ? isFlipped : false;
+    const displayFen = shouldShowDefaultBoard ? DEFAULT_FEN : fen;
+    const displayIsFlipped = shouldShowDefaultBoard ? defaultBoardIsFlipped : isFlipped;
+    const captured = getCapturedPieces(displayFen);
     const materialDiff = getMaterialDiff(captured);
-    const topSide = isFlipped ? 'white' : 'black';
-    const bottomSide = isFlipped ? 'black' : 'white';
+    const topSide = displayIsFlipped ? 'white' : 'black';
+    const bottomSide = displayIsFlipped ? 'black' : 'white';
     const getSideMaterial = (side) => ({
         pieces: side === 'white' ? captured.whiteSide : captured.blackSide,
         diff: side === 'white'
@@ -453,15 +462,11 @@ const GameBoard = () => {
     const bottomClockSeconds = isGameActiveUI
         ? (isFlipped ? getDisplayTime('b') : getDisplayTime('w'))
         : selectedBaseTime;
-    const shouldShowDefaultBoard = !archiveGameId && (
-        location.pathname === '/play' ||
-        (location.pathname === '/play/bots' && !isGameActiveUI)
-    );
     const boardGameLogic = shouldShowDefaultBoard
         ? {
             ...gameLogic,
-            fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
-            isFlipped: false,
+            fen: DEFAULT_FEN,
+            isFlipped: defaultBoardIsFlipped,
             lastMove: { from: null, to: null },
             validMoves: [],
             selectedSquare: null

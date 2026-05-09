@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Enum, DateTime, ForeignKey, Text, Float, Index
+from sqlalchemy import Column, Integer, String, Enum, DateTime, ForeignKey, Text, Float, Index, Boolean
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy import func
 from database import Base
@@ -96,6 +96,20 @@ class ImportedGame(Base):
 Index("ix_imported_games_white_lower", func.lower(ImportedGame.white))
 Index("ix_imported_games_black_lower", func.lower(ImportedGame.black))
 Index("ix_imported_games_opening_lower", func.lower(ImportedGame.opening))
+
+
+class Player(Base):
+    __tablename__ = "players"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), unique=True, nullable=False, index=True)
+    slug = Column(String(255), unique=True, nullable=True, index=True)
+    chesscom_username = Column(String(255), nullable=True, index=True)
+    chesscom_master_slug = Column(String(255), nullable=True, index=True)
+    aliases = Column(Text, nullable=True)
+    games = Column(Integer, nullable=False, default=0, index=True)
+    is_catalog = Column(Boolean, nullable=False, default=True, index=True)
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
 
 class ImportedPgnFile(Base):

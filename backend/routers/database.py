@@ -76,7 +76,7 @@ def player_name_variants(name: str):
 
 
 def sql_player_name(column: str):
-    return f"replace(replace(lower({column}), '_', ' '), '-', ' ')"
+    return f"replace(replace(replace(lower({column}), '_', ' '), '-', ' '), ',', ' ')"
 
 
 def catalog_variants_for_player(player):
@@ -341,7 +341,6 @@ def player_profile(
     white_name = sql_player_name("white")
     black_name = sql_player_name("black")
     player_sql = placeholders("player", variants)
-    placeholders = player_sql
 
     total_games = int(db.execute(text(f"""
         SELECT COUNT(*)
@@ -363,10 +362,10 @@ def player_profile(
                    OR ({black_name} IN ({player_sql}) AND result = '1-0')
             ) AS losses,
             COUNT(*) FILTER (WHERE {white_name} IN ({player_sql}) AND result = '1-0') AS white_wins,
-            COUNT(*) FILTER (WHERE lower(white) IN ({placeholders}) AND result IN ('1/2-1/2', '1/2', '½-½')) AS white_draws,
+            COUNT(*) FILTER (WHERE {white_name} IN ({player_sql}) AND result IN ('1/2-1/2', '1/2', '½-½')) AS white_draws,
             COUNT(*) FILTER (WHERE {white_name} IN ({player_sql}) AND result = '0-1') AS white_losses,
             COUNT(*) FILTER (WHERE {black_name} IN ({player_sql}) AND result = '0-1') AS black_wins,
-            COUNT(*) FILTER (WHERE lower(black) IN ({placeholders}) AND result IN ('1/2-1/2', '1/2', '½-½')) AS black_draws,
+            COUNT(*) FILTER (WHERE {black_name} IN ({player_sql}) AND result IN ('1/2-1/2', '1/2', '½-½')) AS black_draws,
             COUNT(*) FILTER (WHERE {black_name} IN ({player_sql}) AND result = '1-0') AS black_losses
         FROM imported_games
         WHERE {where_clause}
@@ -547,40 +546,23 @@ def get_player_count_union(db: Session, search: str = ""):
 
 
 def get_players(db: Session, page: int = 1, page_size: int = 24, search: str = "", sort: str = "name"):
-    catalog_players = [
-        player["name"]
-        for player in HISTORICAL_PLAYERS
-        if not search.strip() or search.strip().lower() in player["name"].lower()
-    ]
-    if not catalog_players:
+    query = db.query(models.Player).filter(models.Player.is_catalog.is_(True))
+    if search.strip():
+        query = query.filter(func.lower(models.Player.name).like(f"%{search.strip().lower()}%"))
+
+    total = query.count()
+    if total == 0:
         return {"players": [], "total": 0, "page": page, "page_size": page_size}
 
-    white = sql_player_name("white")
-    black = sql_player_name("black")
-    players_with_counts = []
-
-    for player_name in catalog_players:
-        variants = get_catalog_variant_map()[player_name]
-        player_params = bind_values("player", variants)
-        player_sql = placeholders("player", variants)
-        games = int(db.execute(text(f"""
-            SELECT COUNT(*)
-            FROM imported_games
-            WHERE {white} IN ({player_sql}) OR {black} IN ({player_sql})
-        """), player_params).scalar() or 0)
-        players_with_counts.append({"name": player_name, "games": games})
-
     if sort == "games":
-        players_with_counts.sort(key=lambda player: (-player["games"], player["name"].lower()))
+        query = query.order_by(models.Player.games.desc(), func.lower(models.Player.name).asc())
     else:
-        players_with_counts.sort(key=lambda player: player["name"].lower())
+        query = query.order_by(func.lower(models.Player.name).asc())
 
-    total = len(players_with_counts)
-    start = (page - 1) * page_size
-    rows = players_with_counts[start:start + page_size]
+    rows = query.offset((page - 1) * page_size).limit(page_size).all()
 
     return {
-        "players": rows,
+        "players": [{"name": row.name, "games": int(row.games or 0)} for row in rows],
         "total": total,
         "page": page,
         "page_size": page_size,

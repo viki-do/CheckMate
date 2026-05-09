@@ -26,6 +26,7 @@ MANUAL_ALIASES = {
     "Vidit Gujrathi": ["vidit", "vidit santosh gujrathi"],
     "Aravindh Chithambaram": ["aravindh", "aravindh chithambaram v r"],
     "Harikrishna Pentala": ["harikrishna"],
+    "Javokhir Sindarov": ["javokhir_sindarov05", "sindarovjr", "sindarovgm05", "sindarovgm2005"],
 }
 
 

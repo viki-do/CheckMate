@@ -92,6 +92,10 @@ class UsernameChangeRequest(BaseModel):
     username: str
     password: str
 
+class PasswordChangeRequest(BaseModel):
+    current_password: str
+    new_password: str
+
 def is_valid_username(value: str):
     username = value.strip()
     return (
@@ -309,3 +313,27 @@ def check_username_availability(
         return {"available": False, "reason": "taken"}
 
     return {"available": True, "reason": None}
+
+@router.put("/profile/password")
+def change_password(data: PasswordChangeRequest, user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.id == uuid.UUID(user_id)).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Nem talÃƒÆ’Ã‚Â¡lhatÃƒÆ’Ã‚Â³")
+
+    if not user.password_hash:
+        raise HTTPException(status_code=400, detail="Password changes are unavailable for this account")
+    if not pwd_context.verify(data.current_password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Incorrect current password")
+
+    next_password = data.new_password or ""
+    if len(next_password) < 8 or not re.search(r"[A-Z]", next_password) or not re.search(r"[0-9]", next_password):
+        raise HTTPException(
+            status_code=400,
+            detail="Password must be at least 8 characters and include one capital letter and one number",
+        )
+    if next_password == data.current_password:
+        raise HTTPException(status_code=400, detail="New password must be different")
+
+    user.password_hash = pwd_context.hash(next_password)
+    db.commit()
+    return {"message": "Password updated"}
