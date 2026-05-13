@@ -1,9 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Chess } from 'chess.js';
 import { useNavigate } from 'react-router-dom';
+import { CheckCircle, Download, Info, Plus, Search, X } from 'lucide-react';
 import ChessBoardGrid from '../ChessBoardGrid';
-import { ControlBtn } from '../component_helpers/AnalysisHelpers';
-import { ChevronLeft, ChevronRight, New, ResetArrow } from '../icons/Icons';
+import { ControlBtn, FooterAction } from '../component_helpers/AnalysisHelpers';
+import {
+  AddToCollection,
+  ChevronLeft,
+  ChevronRight,
+  CircleTargetPractice,
+  DocumentFolderBoard,
+  Magnifier,
+  ResetArrow,
+  Share,
+} from '../icons/Icons';
 import CapturedProgressBar from '../game-board/CapturedProgressBar';
 import { useChess } from '../../context/ChessContext';
 import { getReplayPositionSoundName } from '../../hooks/chess-game/soundUtils';
@@ -12,6 +22,14 @@ import { CapturedRow } from '../MaterialAdvantage';
 import { getCapturedPieces, getMaterialDiff } from '../materialUtils';
 
 const DEFAULT_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+const COLLECTIONS_STORAGE_KEY = 'checkmate_game_collections';
+const PUBLIC_ID_CHARS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+
+const createPublicId = (length = 9) => {
+  const randomValues = new Uint32Array(length);
+  crypto.getRandomValues(randomValues);
+  return Array.from(randomValues, (value) => PUBLIC_ID_CHARS[value % PUBLIC_ID_CHARS.length]).join('');
+};
 
 const parseMoveText = (moveText) => {
   const chess = new Chess();
@@ -144,12 +162,173 @@ const InfoLine = ({ label, value }) => {
   );
 };
 
+const getCollectionGames = (collection) => (
+  Array.isArray(collection?.games) ? collection.games : []
+);
+
+const getGameCollectionPayload = (game) => ({
+  id: String(game.id),
+  white: game.white,
+  black: game.black,
+  white_elo: game.white_elo,
+  black_elo: game.black_elo,
+  result: game.result,
+  date: game.date,
+  event: game.event,
+  site: game.site,
+  round: game.round,
+  opening: game.detected_opening?.name || game.opening || '',
+  eco: game.detected_opening?.eco || game.eco || '',
+  moves: game.moves,
+  addedAt: new Date().toISOString(),
+});
+
+const AddToCollectionModal = ({ isOpen, game, collections, filter, onFilterChange, onClose, onAdd, onCreateNew, lastAddedCollectionId }) => {
+  const [isCreatingCollection, setIsCreatingCollection] = useState(false);
+  const [newCollectionName, setNewCollectionName] = useState('');
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setIsCreatingCollection(false);
+    setNewCollectionName('');
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  const filteredCollections = collections.filter((collection) =>
+    collection.name.toLowerCase().includes(filter.trim().toLowerCase())
+  );
+  const canCreateCollection = newCollectionName.trim().length >= 2;
+  const handleCreateCollection = () => {
+    if (!canCreateCollection) return;
+    onCreateNew(newCollectionName.trim());
+    setNewCollectionName('');
+  };
+  const cancelCreateCollection = () => {
+    setIsCreatingCollection(false);
+    setNewCollectionName('');
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75">
+      <div className="w-[420px] h-[460px] rounded-lg bg-[#272522] border border-[#3a3936] shadow-2xl overflow-hidden flex flex-col">
+        <div className="h-13 px-4 flex items-center justify-between bg-[#1f1e1b] shrink-0">
+          <h2 className="text-white text-[18px] font-semibold">Add to Collection</h2>
+          <button type="button" onClick={onClose} className="text-[#8f8e8b] hover:text-white">
+            <X size={24} strokeWidth={3} />
+          </button>
+        </div>
+
+        <div className="p-3 border-b border-[#343330] shrink-0">
+          <div className="relative">
+            <Search size={22} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#999896]" />
+            <input
+              autoFocus
+              value={filter}
+              onChange={(event) => onFilterChange(event.target.value)}
+              placeholder="Filter Collections"
+              className="w-full h-11 bg-[#3a3936] border border-[#55534f] rounded-md pl-10 pr-3 text-[#d7d6d4] placeholder:text-[#8b8987] text-[14px] font-semibold outline-none focus:border-[#8bc34a]"
+            />
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          {filteredCollections.length > 0 ? (
+            filteredCollections.map((collection) => {
+              const games = getCollectionGames(collection);
+              const alreadyAdded = games.some((savedGame) => String(savedGame.id) === String(game.id));
+              const wasJustAdded = lastAddedCollectionId === collection.id && alreadyAdded;
+              return (
+                <button
+                  key={collection.id}
+                  type="button"
+                  onClick={() => onAdd(collection.id)}
+                  className="w-full min-h-15 px-4 py-2 flex items-center gap-3 text-left hover:bg-[#2f2e2b] transition-colors"
+                >
+                  <img
+                    src="/assets/icons/advanced-tactics.png"
+                    alt=""
+                    className="w-7 h-7 rounded object-cover shrink-0"
+                    draggable="false"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[#d7d6d4] text-[14px] font-semibold">
+                      {collection.name} <span className="text-[#8f8e8b]">({games.length} {games.length === 1 ? 'game' : 'games'})</span>
+                    </div>
+                    {alreadyAdded && !wasJustAdded && (
+                      <div className="mt-0.5 flex items-center gap-1 text-[#bab9b8] text-[12px] font-semibold">
+                        <Info size={13} strokeWidth={3} /> Game is already in collection
+                      </div>
+                    )}
+                  </div>
+                  {wasJustAdded ? (
+                    <span className="w-7 h-7 rounded-full bg-[#81b64c] flex items-center justify-center text-white shrink-0">
+                      <CheckCircle size={20} strokeWidth={3.5} />
+                    </span>
+                  ) : (
+                    <Plus size={24} strokeWidth={4} className="text-[#9f9e9b]" />
+                  )}
+                </button>
+              );
+            })
+          ) : (
+            <div className="h-full flex items-center justify-center px-8 text-center text-[#9f9e9b] text-[15px] font-semibold">
+              No collections found
+            </div>
+          )}
+        </div>
+
+        <div className="p-3 bg-[#24231f] border-t border-[#343330] shrink-0">
+          {isCreatingCollection ? (
+            <div className="flex items-center gap-2">
+              <input
+                autoFocus
+                value={newCollectionName}
+                onChange={(event) => setNewCollectionName(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') handleCreateCollection();
+                  if (event.key === 'Escape') cancelCreateCollection();
+                }}
+                placeholder="Collection Name"
+                className="h-11 flex-1 rounded-md border border-[#65635f] bg-[#343330] px-3 text-[#d7d6d4] placeholder:text-[#8b8987] text-[14px] font-semibold outline-none focus:border-[#8bc34a]"
+              />
+              <button
+                type="button"
+                disabled={!canCreateCollection}
+                onClick={handleCreateCollection}
+                className={`h-11 w-13 rounded-md flex items-center justify-center transition-colors ${canCreateCollection ? 'bg-gradient-to-b from-[#8bc34a] to-[#5fa444] text-white hover:from-[#9bd45c] hover:to-[#6cb64e]' : 'bg-[#4d6f39] text-[#9fb58d] cursor-not-allowed'}`}
+              >
+                <CheckCircle size={22} strokeWidth={3.5} />
+              </button>
+              <button type="button" onClick={cancelCreateCollection} className="h-11 w-10 flex items-center justify-center text-[#9f9e9b] hover:text-white">
+                <X size={28} strokeWidth={4} />
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setIsCreatingCollection(true)}
+              className="w-full h-12 rounded-lg bg-gradient-to-b from-[#3a3936] to-[#2f2e2b] text-[#d7d6d4] text-[16px] font-semibold hover:from-[#45433f] hover:to-[#343330] flex items-center justify-center gap-3"
+            >
+              <Plus size={24} strokeWidth={4} /> Create New Collection
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const DatabaseGameViewer = ({ game }) => {
   const navigate = useNavigate();
   const { playSound } = useChess();
   const replay = useMemo(() => buildReplay(game), [game]);
   const [moveIndex, setMoveIndex] = useState(replay.history.length);
   const [activeTab, setActiveTab] = useState('moves');
+  const [isAddToCollectionOpen, setIsAddToCollectionOpen] = useState(false);
+  const [collectionFilter, setCollectionFilter] = useState('');
+  const [collections, setCollections] = useState([]);
+  const [lastAddedCollectionId, setLastAddedCollectionId] = useState(null);
   const fen = replay.fens[moveIndex] || DEFAULT_FEN;
   const lastMove = moveIndex > 0 ? replay.history[moveIndex - 1] : null;
   const moveRows = formatMoveRows(replay.history);
@@ -184,6 +363,63 @@ const DatabaseGameViewer = ({ game }) => {
 
   const goToAnalysis = () => {
     navigate(`/analysis/game/master/${game.id}/review`);
+  };
+
+  const loadCollections = () => {
+    try {
+      setCollections(JSON.parse(localStorage.getItem(COLLECTIONS_STORAGE_KEY) || '[]'));
+    } catch {
+      setCollections([]);
+    }
+  };
+
+  const openAddToCollection = () => {
+    loadCollections();
+    setCollectionFilter('');
+    setLastAddedCollectionId(null);
+    setIsAddToCollectionOpen(true);
+  };
+
+  const addGameToCollection = (collectionId) => {
+    const gamePayload = getGameCollectionPayload(game);
+    let didAdd = false;
+    const updatedCollections = collections.map((collection) => {
+      if (collection.id !== collectionId) return collection;
+
+      const games = getCollectionGames(collection);
+      const exists = games.some((savedGame) => String(savedGame.id) === String(gamePayload.id));
+      const nextGames = exists ? games : [gamePayload, ...games];
+      didAdd = !exists;
+
+      return {
+        ...collection,
+        games: nextGames,
+        gameCount: nextGames.length,
+        updatedAt: new Date().toISOString(),
+      };
+    });
+
+    setCollections(updatedCollections);
+    localStorage.setItem(COLLECTIONS_STORAGE_KEY, JSON.stringify(updatedCollections));
+    setLastAddedCollectionId(didAdd ? collectionId : null);
+  };
+
+  const createCollectionFromModal = (name) => {
+    const newCollection = {
+      id: crypto.randomUUID(),
+      publicId: createPublicId(),
+      name,
+      ownerName: localStorage.getItem('chessUsername') || 'VikhiKeh',
+      privacy: 'public',
+      participants: [],
+      games: [],
+      gameCount: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    const updatedCollections = [newCollection, ...collections];
+    setCollections(updatedCollections);
+    localStorage.setItem(COLLECTIONS_STORAGE_KEY, JSON.stringify(updatedCollections));
   };
 
   const playReplaySound = (nextIndex) => {
@@ -246,42 +482,46 @@ const DatabaseGameViewer = ({ game }) => {
         />
       </div>
 
-      <aside className="w-112.5 shrink-0 h-170 self-center bg-[#262421] flex flex-col font-sans border border-[#3c3a37] rounded-xl overflow-hidden shadow-2xl">
-        <div className="grid grid-cols-2 border-b border-[#373430] bg-[#1f1d1a]">
+      <aside className="w-[480px] shrink-0 h-[744px] self-center bg-[#262421] flex flex-col font-sans border border-[#3c3a37] rounded-md overflow-hidden shadow-2xl">
+        <div className="grid grid-cols-2 h-15 bg-[#1f1e1b] shrink-0">
           <button
             type="button"
             onClick={() => setActiveTab('moves')}
-            className={`py-4 text-center font-black border-b-4 ${
-              activeTab === 'moves' ? 'text-white border-white' : 'text-[#bab9b8] border-transparent'
+            className={`flex flex-col items-center justify-center gap-1.5 text-[13px] font-semibold ${
+              activeTab === 'moves' ? 'bg-[#262421] text-white' : 'text-[#bab9b8] hover:text-white'
             }`}
           >
-            Moves
+            <DocumentFolderBoard size={22} />
+            <span>Moves</span>
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('info')}
-            className={`py-4 text-center font-black border-b-4 ${
-              activeTab === 'info' ? 'text-white border-white' : 'text-[#bab9b8] border-transparent'
+            className={`flex flex-col items-center justify-center gap-1.5 text-[13px] font-semibold ${
+              activeTab === 'info' ? 'bg-[#262421] text-white' : 'text-[#bab9b8] hover:text-white'
             }`}
           >
-            Info
+            <Info size={24} strokeWidth={3} />
+            <span>Info</span>
           </button>
         </div>
 
         {activeTab === 'moves' ? (
           <>
-            <div className="px-5 py-3 border-b border-[#373430] text-[#d7d6d4]">
-              <div className="font-bold">{openingDisplay.title}</div>
-              <div className="text-sm text-[#8b8987] mt-1">
-                {[openingDisplay.metaEco, game.date].filter(Boolean).join(' - ') || 'Game database'}
+            <div className="h-14 px-4 flex items-center border-b border-[#373430] text-[#d7d6d4] shrink-0">
+              <div className="flex items-center gap-2 min-w-0">
+                <Magnifier size={18} className="text-[#9f9e9b] shrink-0" />
+                <div className="truncate text-[15px] font-semibold">
+                  {[openingDisplay.metaEco, openingDisplay.title].filter(Boolean).join(': ') || 'Game database'}
+                </div>
               </div>
               {replay.parseError && <div className="text-sm text-[#f87171] mt-1">Could not parse moves</div>}
             </div>
 
             <div className="flex-1 overflow-y-auto no-scrollbar bg-[#262421]">
               {moveRows.map((row) => (
-                <div key={row.moveNumber} className="grid grid-cols-[48px_1fr_1fr] px-5 py-2 odd:bg-[#2b2926] text-[#bab9b8] font-bold">
-                  <div>{row.moveNumber}.</div>
+                <div key={row.moveNumber} className="grid grid-cols-[48px_1fr_1fr] px-4 h-9 items-center odd:bg-[#2b2926] text-[#bab9b8] font-bold text-[14px]">
+                  <div className="text-[#9f9e9b]">{row.moveNumber}.</div>
                   <button
                     onClick={() => goToReplayMove(row.white.num + 1)}
                     className={`text-left hover:text-white flex items-center ${moveIndex === row.white.num + 1 ? 'text-white' : ''}`}
@@ -321,9 +561,9 @@ const DatabaseGameViewer = ({ game }) => {
           </div>
         )}
 
-        <div className="p-2 bg-[#21201d] rounded-b-lg border-t border-[#3c3a37] shrink-0">
-          <div className="flex justify-between gap-1 px-1 h-12">
-            <ControlBtn icon={<New size={20} />} onClick={goToAnalysis} />
+        <div className="p-3 bg-[#21201d] rounded-b-md border-t border-[#3c3a37] shrink-0">
+          <div className="flex justify-between gap-1 px-1 h-12 mb-3">
+            <ControlBtn icon={<Magnifier size={22} />} onClick={goToAnalysis} />
             <ControlBtn icon={<ResetArrow size={20} />} onClick={() => goToReplayMove(0)} />
             <ControlBtn
               icon={<ChevronLeft size={20} />}
@@ -334,8 +574,28 @@ const DatabaseGameViewer = ({ game }) => {
               onClick={() => goToReplayMove(moveIndex + 1)}
             />
           </div>
+          <div className="flex justify-center items-center text-[#8b8987] pb-1">
+            <div className="flex gap-2 text-xs">
+              <FooterAction icon={<Download size={20} />} label="" onClick={() => {}} />
+              <FooterAction icon={<Share size={20} />} label="" onClick={() => {}} />
+              <FooterAction icon={<CircleTargetPractice size={20} />} label="" onClick={() => {}} />
+              <FooterAction icon={<AddToCollection size={20} />} label="" onClick={openAddToCollection} />
+            </div>
+          </div>
         </div>
       </aside>
+
+      <AddToCollectionModal
+        isOpen={isAddToCollectionOpen}
+        game={game}
+        collections={collections}
+        filter={collectionFilter}
+        onFilterChange={setCollectionFilter}
+        onClose={() => setIsAddToCollectionOpen(false)}
+        onAdd={addGameToCollection}
+        onCreateNew={createCollectionFromModal}
+        lastAddedCollectionId={lastAddedCollectionId}
+      />
     </main>
   );
 };

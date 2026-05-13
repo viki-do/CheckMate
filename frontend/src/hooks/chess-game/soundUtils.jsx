@@ -22,7 +22,7 @@ export const getHistoryNavigationSoundName = (history = [], currentIndex = -1, n
     const next = normalizeHistoryIndex(nextIndex, history.length);
     if (current === next) return null;
 
-    const soundMove = next > current ? history[next] : history[current];
+    const soundMove = history[next];
     return getMoveSoundName(soundMove?.m);
 };
 

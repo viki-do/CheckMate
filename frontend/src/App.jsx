@@ -83,6 +83,10 @@ const App = () => {
                             path="/analysis/collections" 
                             element={isAuthenticated ? <GameCollectionsPage /> : <Navigate to="/login" />} 
                         />
+                        <Route
+                            path="/analysis/collection/:collectionSlug/games"
+                            element={isAuthenticated ? <GameCollectionsPage /> : <Navigate to="/login" />}
+                        />
                         <Route 
                             path="/analysis/game/master/:gameId/review" 
                             element={isAuthenticated ? <AnalyzeBoard /> : <Navigate to="/login" />} 

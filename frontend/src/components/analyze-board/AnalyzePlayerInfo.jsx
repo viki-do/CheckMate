@@ -6,21 +6,26 @@ const AnalyzePlayerInfo = ({ color, pieces, diff, onDragOver }) => {
 
     return (
         <div
-            className={`w-170 flex items-center justify-between px-1 h-12 ${isWhite ? 'text-[#bab9b8]' : 'text-[#8b8987]'}`}
+            className="w-170 h-12 flex items-center justify-between text-[#bab9b8]"
             onDragOver={onDragOver}
         >
-            <div className="flex flex-col justify-center">
-                <div className="flex items-center gap-2">
-                    <div className={`w-6 h-6 ${isWhite ? 'bg-[#ffffff] text-black shadow-sm border border-black/10' : 'bg-[#262421] border border-white/5'} rounded flex items-center justify-center italic text-xs font-bold`}>
-                        {isWhite ? 'W' : 'B'}
+            <div className="flex items-start gap-3">
+                <div className="pt-1">
+                    <div className={`w-8 h-8 rounded flex items-end justify-center overflow-hidden shrink-0 ${isWhite ? 'bg-[#eeeeec] border border-black/10 shadow-sm' : 'bg-[#3a3936] border border-white/5'}`}>
+                        <i className={`fas fa-user text-[26px] ${isWhite ? 'text-[#d0d0ce]' : 'text-[#151515]'}`}></i>
+                        <span className="sr-only">{isWhite ? 'W' : 'B'}</span>
                     </div>
-                    <span className={`font-bold text-sm ${isWhite ? 'text-[#bab9b8]' : ''}`}>{isWhite ? 'White' : 'Black'}</span>
                 </div>
-                <AnalyzeCapturedRow
-                    pieces={pieces}
-                    side={color}
-                    diff={diff}
-                />
+                <div className="flex flex-col pt-1">
+                    <span className="font-bold text-[15px] leading-none text-[#f0f0ee]">
+                        {isWhite ? 'White' : 'Black'}
+                    </span>
+                    <AnalyzeCapturedRow
+                        pieces={pieces}
+                        side={color}
+                        diff={diff}
+                    />
+                </div>
             </div>
             {!isWhite && <Settings size={18} className="cursor-pointer hover:text-white transition-colors" />}
         </div>

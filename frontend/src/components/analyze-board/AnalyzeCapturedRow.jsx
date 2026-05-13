@@ -1,4 +1,6 @@
 const AnalyzeCapturedRow = ({ pieces, side, diff }) => {
+    if (pieces.length === 0 && diff <= 0) return null;
+
     const groups = pieces.reduce((acc, piece) => {
         if (!acc[piece]) acc[piece] = [];
         acc[piece].push(piece);

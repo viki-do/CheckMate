@@ -18,6 +18,18 @@ backend/logs/
 backend/sync_chesscom_full_*.log
 backend/uploads/
 
+# Local analysis/export outputs
+exports/*.csv
+exports/**/*.csv
+*.csv
+*.har
+backend/extract_chesscom_review_from_har.*
+backend/compare_analysis_exports.mjs
+backend/import_chesscom_master_games.py
+backend/import_historical_pgn_folder.py
+backend/import_pgns_to_r2.py
+backend/sync_chesscom_players.py
+
 # Engine executable (Too large for GitHub)
 backend/engine/stockfish.exe
 backend/engine/stockfish

@@ -2,12 +2,18 @@ import math
 import os
 
 import chess
+import chess.engine
 import chess.polyglot
 
 
 class ChessCoachEngine:
     def __init__(self, book_bin_path="data/titans.bin"):
         self.WIN_CHANCE_CONSTANT = 400.0
+        self.REVIEW_DEPTH = 14
+        self.PLAYED_MOVE_DEPTH = 12
+        self.REVIEW_NODES = 180000
+        self.PLAYED_MOVE_NODES = 90000
+        self.ACCURACY_EXPONENT = 32
         self.book_bin_path = book_bin_path
         self.phase_thresholds = {
             "opening": {
@@ -58,7 +64,44 @@ class ChessCoachEngine:
             return 1.0 if cp_score > 0 else 0.0
         return 1 / (1 + math.pow(10, -cp_score / self.WIN_CHANCE_CONSTANT))
 
-    def analyze_position_deep(self, board, engine, depth=20, multipv=3):
+    def get_review_loss(self, player_best, player_curr, label=None):
+        if label == "book":
+            return 0
+
+        base_loss = max(0, self.get_win_chance(player_best) - self.get_win_chance(player_curr))
+
+        # Chess.com's review is harsher than pure win chance when a move enters
+        # forced mate, even from an already bad position.
+        if player_curr <= -9000:
+            if player_best > -9000:
+                return max(base_loss, 0.075 if player_best <= -700 else 0.18)
+
+            mate_distance_loss = max(0, abs(player_curr) - abs(player_best))
+            if mate_distance_loss >= 400:
+                return max(base_loss, 0.045)
+            if mate_distance_loss >= 200:
+                return max(base_loss, 0.025)
+
+        # Missing a forced mate should still matter even if the resulting
+        # position remains winning.
+        if player_best >= 9000 and player_curr < 9000:
+            return max(base_loss, 0.16)
+
+        return base_loss
+
+    def review_limit(self, depth=None, nodes=None):
+        return chess.engine.Limit(
+            depth=depth or self.REVIEW_DEPTH,
+            nodes=nodes or self.REVIEW_NODES,
+        )
+
+    def played_move_limit(self, depth=None, nodes=None):
+        return chess.engine.Limit(
+            depth=depth or self.PLAYED_MOVE_DEPTH,
+            nodes=nodes or self.PLAYED_MOVE_NODES,
+        )
+
+    def analyze_position_deep(self, board, engine, depth=None, multipv=3):
         book_move = None
         if os.path.exists(self.book_bin_path):
             try:
@@ -68,7 +111,7 @@ class ChessCoachEngine:
             except Exception:
                 pass
 
-        analysis = engine.analyse(board, chess.engine.Limit(nodes=1000000), multipv=multipv)
+        analysis = engine.analyse(board, self.review_limit(depth=depth), multipv=multipv)
         lines = []
         for entry in analysis:
             score = entry["score"].white().score(mate_score=10000)
@@ -91,6 +134,14 @@ class ChessCoachEngine:
             "best_move": lines[0]["first_move_san"] if lines else None,
             "raw_analysis": analysis,
         }
+
+    def evaluate_played_move_after(self, board, move, engine, depth=None):
+        board.push(move)
+        try:
+            info = engine.analyse(board, self.played_move_limit(depth=depth))
+            return info["score"].white().score(mate_score=10000)
+        finally:
+            board.pop()
 
     def get_game_phase(self, board):
         phase_score = 0
@@ -163,9 +214,9 @@ class ChessCoachEngine:
     def is_great_candidate(self, cp_loss, best_gain, only_move):
         return only_move and cp_loss <= 18 and best_gain >= 0.06
 
-    def classify_move(self, board, move, analysis_list, prev_eval, player_elo=1200, is_book=False):
+    def classify_move(self, board, move, analysis_list, prev_eval, player_elo=1200, is_book=False, played_eval=None):
         if is_book:
-            return "book", prev_eval
+            return "book", played_eval if played_eval is not None else prev_eval
 
         if not analysis_list:
             return "best", prev_eval
@@ -179,7 +230,9 @@ class ChessCoachEngine:
             return "best", best_eval
 
         actual_move_info = next((a for a in analysis_list if a.get("pv") and a["pv"][0] == move), None)
-        if actual_move_info:
+        if played_eval is not None:
+            move_eval = played_eval
+        elif actual_move_info:
             move_eval = actual_move_info["score"].white().score(mate_score=10000)
         else:
             fallback_base = analysis_list[-1]["score"].white().score(mate_score=10000)
@@ -215,6 +268,17 @@ class ChessCoachEngine:
         if abs(best_eval) > 9000 and abs(move_eval) < 9000:
             return "blunder", move_eval
 
+        if player_curr <= -9000:
+            if player_best > -9000:
+                return "inaccuracy" if player_best <= -700 else "blunder", move_eval
+
+            mate_distance_loss = max(0, abs(player_curr) - abs(player_best))
+            if mate_distance_loss >= 600:
+                return "mistake", move_eval
+            if mate_distance_loss >= 200:
+                return "inaccuracy", move_eval
+            return "excellent", move_eval
+
         if abs(move_eval) > 9000 and cp_loss <= 10:
             return "best", move_eval
 
@@ -226,6 +290,32 @@ class ChessCoachEngine:
 
         if best_gain >= 0.18 and p_curr <= p_prev + 0.02:
             return "miss", move_eval
+
+        # In already decisive positions, a centipawn swing can look huge while
+        # the practical win chance barely changes. Prefer the win-chance shape
+        # here; this matches Chess.com's tendency to call many lost-position
+        # moves excellent/good instead of repeatedly punishing cp loss.
+        if p_best <= 0.08:
+            if loss <= 0.02:
+                return "excellent", move_eval
+            if loss <= 0.04:
+                return "good", move_eval
+            if loss <= 0.08:
+                return "inaccuracy", move_eval
+            if loss <= 0.16:
+                return "mistake", move_eval
+            return "blunder", move_eval
+
+        if p_best >= 0.92:
+            if loss <= 0.015:
+                return "excellent", move_eval
+            if loss <= 0.035:
+                return "good", move_eval
+            if loss <= 0.075:
+                return "inaccuracy", move_eval
+            if loss <= 0.15:
+                return "mistake", move_eval
+            return "blunder", move_eval
 
         if cp_loss >= phase_cfg["blunder_cp"] or delta_prev >= phase_cfg["blunder_loss"] or loss >= phase_cfg["blunder_loss"]:
             return "blunder", move_eval
@@ -250,6 +340,6 @@ class ChessCoachEngine:
     def calculate_accuracy(self, win_chance_losses, win_probs_before):
         if not win_chance_losses:
             return 100.0
-        move_accs = [100 * math.pow(1 - loss, 12) for loss in win_chance_losses]
+        move_accs = [100 * math.pow(1 - loss, self.ACCURACY_EXPONENT) for loss in win_chance_losses]
         avg_acc = sum(move_accs) / len(move_accs)
         return round(max(avg_acc, 5.0), 1)

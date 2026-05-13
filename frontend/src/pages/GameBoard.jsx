@@ -266,7 +266,14 @@ const GameBoard = () => {
                     ...h,
                     analysisLabel: moveAnalysis.label.toLowerCase(), // Ikonok miatt kisbetű!
                     eval: moveAnalysis.eval,
-                    bestMove: moveAnalysis.best_move
+                    rawEval: moveAnalysis.raw_eval,
+                    bestMove: moveAnalysis.best_move,
+                    bestMoveUci: moveAnalysis.best_move_uci,
+                    bestEval: moveAnalysis.best_eval,
+                    rawBestEval: moveAnalysis.raw_best_eval,
+                    evalLoss: moveAnalysis.eval_loss,
+                    winChanceLoss: moveAnalysis.win_chance_loss,
+                    engineLines: moveAnalysis.engine_lines || []
                 };
             }
             return h;
@@ -281,6 +288,8 @@ const GameBoard = () => {
     const handleStartNewGame = useCallback(async (...args) => {
         setAnalysisData(null);
         setIsAnalyzing(false);
+        setDelayedShowPopup(false);
+        setIsPopupClosed(false);
         return startNewGame(...args);
     }, [startNewGame]);
 
@@ -294,6 +303,8 @@ const GameBoard = () => {
     setIsStarting(true);
     setAnalysisData(null);
     setIsAnalyzing(false);
+    setDelayedShowPopup(false);
+    setIsPopupClosed(false);
     
     // 1. Azonnal mutassuk a botot a fejlécben
     setOpponent(bot); 
@@ -476,6 +487,8 @@ const GameBoard = () => {
         setIsGameActiveUI(false);
         setAnalysisData(null);
         setIsAnalyzing(false);
+        setDelayedShowPopup(false);
+        setIsPopupClosed(false);
         handleResetGame();
         navigate('/play/bots');
     };
@@ -547,7 +560,7 @@ const GameBoard = () => {
                 setPreviewOpponent,
                 isPopupClosed,
                 setIsPopupClosed,
-                setIsPopupVisible:delayedShowPopup,
+                isPopupVisible: delayedShowPopup,
                 goToMove,
                 handleRunFullAnalysis, // <--- EZ HIÁNYZOTT
                 analysisData,          // <--- EZ HIÁNYZOTT

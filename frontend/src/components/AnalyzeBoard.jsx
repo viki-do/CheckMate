@@ -275,6 +275,11 @@ const AnalyzeBoard = () => {
                 eval: res.data.eval / 100,
                 rawEval: res.data.eval,
                 bestMove: res.data.best_move,
+                bestMoveUci: res.data.best_move_uci,
+                bestEval: res.data.best_eval,
+                rawBestEval: res.data.raw_best_eval,
+                evalLoss: res.data.eval_loss,
+                winChanceLoss: res.data.win_chance_loss,
                 engineLines: res.data.engine_lines || [] 
             } : h
         ));
@@ -342,6 +347,11 @@ const handleFullReview = async () => {
                             eval: moveAnalysis.eval, // A backend már osztotta 100-zal
                             rawEval: moveAnalysis.raw_eval,
                             bestMove: moveAnalysis.best_move,
+                            bestMoveUci: moveAnalysis.best_move_uci,
+                            bestEval: moveAnalysis.best_eval,
+                            rawBestEval: moveAnalysis.raw_best_eval,
+                            evalLoss: moveAnalysis.eval_loss,
+                            winChanceLoss: moveAnalysis.win_chance_loss,
                             engineLines: moveAnalysis.engine_lines || [],
                             // Megnyitás neve, ha van
                             openingName: moveAnalysis.opening || null 
@@ -573,7 +583,7 @@ const handleExternalDrop = (e, row, col) => {
     };
 
     return (
-        <div className="flex h-screen w-full bg-[#161512] text-[#bab9b8] px-6 py-4 gap-6 overflow-hidden select-none font-sans items-center"
+        <div className="flex h-screen w-full bg-[#302f2c] text-[#bab9b8] px-6 py-4 gap-6 overflow-hidden select-none font-sans items-center"
             onDragOver={(e) => {
                 // Ez engedélyezi, hogy az egész képernyőn kövessük az egeret
                 e.preventDefault();
