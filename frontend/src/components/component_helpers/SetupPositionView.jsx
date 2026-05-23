@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'; // JAVÍTVA: useState hozzáadva
 import { MoreHorizontal, Trash2, RotateCw, Repeat2 } from 'lucide-react';
+import { useRef } from 'react';
 import { Chess } from 'chess.js'; // JAVÍTVA: Kell a validáláshoz
 import { 
     SetUpPosition, 
@@ -19,6 +20,12 @@ import {
 
 const transparentPixel = new Image();
 transparentPixel.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+const DEFAULT_SETUP_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+const CLEAR_SETUP_FEN = '8/8/8/8/8/8/8/8 w - - 0 1';
+const SETUP_DEBUG = false;
+const setupDebug = (...args) => {
+    if (SETUP_DEBUG) console.log('[SetupPositionView]', ...args);
+};
 
 const SetUpPositionView = ({ 
     onBack, 
@@ -36,18 +43,22 @@ const SetUpPositionView = ({
     onFenChange,
     onLoadConfirm,
     onPieceSelect,
+    onFlipBoard,
+    onResetBoard,
+    onClearBoard,
+    selectedPiece,
     setIsDragging,
     isDragging
 }) => {
     // Lokális state a gépeléshez
+    setupDebug('render', { currentFen, setupTurn, selectedPiece, isDragging });
     const [localFen, setLocalFen] = useState(currentFen);
     const [turn, setTurn] = useState('w');
     const [castling, setCastling] = useState({
         wOO: true, wOOO: true, bOO: true, bOOO: true
     })
+    const handledToolbarPressRef = useRef(false);
     
-     const [selectedPiece, setSelectedPiece] = useState(null); // pl. 'P' vagy 'q'
-
     const updateFenTurn = (fen, nextTurn) => {
         const fenParts = (fen || '').trim().split(/\s+/);
         if (fenParts.length < 4) return fen;
@@ -62,7 +73,7 @@ const SetUpPositionView = ({
     if (!selectedPiece) return;
     
     try {
-        const c = new Chess(localFen);
+        const c = new Chess(localFen, { skipValidation: true });
         // Ha ugyanazt a bábut rakjuk le, ami ott van, akkor "töröljük" (opcionális)
         // c.put({ type: ..., color: ... }, square)
         
@@ -84,12 +95,11 @@ const SetUpPositionView = ({
 
 
      const syncUIWithFen = (fen) => {
-        try {
-            const c = new Chess(fen);
-            setTurn(c.turn());
+        const fenParts = String(fen || '').trim().split(/\s+/);
+        const castlingPart = fenParts[2] || '';
+
+        setTurn(fenParts[1] === 'b' ? 'b' : 'w');
             
-            const fenParts = fen.split(' ');
-            const castlingPart = fenParts[2] || '';
             
             setCastling({
                 wOO: castlingPart.includes('K'),
@@ -97,15 +107,13 @@ const SetUpPositionView = ({
                 bOO: castlingPart.includes('k'),
                 bOOO: castlingPart.includes('q')
             });
-        } catch (e) {
             // Érvénytelen FEN-nél nem frissítjük a UI-t
-        }
     };
 
     useEffect(() => {
         const nextTurn = setupTurn || (() => {
             try {
-                return new Chess(currentFen).turn();
+                return new Chess(currentFen, { skipValidation: true }).turn();
             } catch {
                 return 'w';
             }
@@ -119,11 +127,53 @@ const SetUpPositionView = ({
         const newFen = e.target.value;
         setLocalFen(newFen);
         try {
-            const parsed = new Chess(newFen);
+            const parsed = new Chess(newFen, { skipValidation: true });
             onTurnChange?.(parsed.turn());
             syncUIWithFen(newFen); // Frissítjük a gombokat/választót
             onFenChange(newFen);
         } catch (err) {}
+    };
+
+    const resetBoard = () => {
+        setupDebug('handleResetBoard:start', { before: localFen });
+        setTurn('w');
+        setCastling({ wOO: true, wOOO: true, bOO: true, bOOO: true });
+        setLocalFen(DEFAULT_SETUP_FEN);
+        onResetBoard?.(DEFAULT_SETUP_FEN);
+        setupDebug('handleResetBoard:called-parent', { nextFen: DEFAULT_SETUP_FEN, hasParentHandler: Boolean(onResetBoard) });
+    };
+
+    const clearBoard = () => {
+        setupDebug('handleClearBoard:start', { before: localFen });
+        setTurn('w');
+        setCastling({ wOO: false, wOOO: false, bOO: false, bOOO: false });
+        setLocalFen(CLEAR_SETUP_FEN);
+        onClearBoard?.(CLEAR_SETUP_FEN);
+        setupDebug('handleClearBoard:called-parent', { nextFen: CLEAR_SETUP_FEN, hasParentHandler: Boolean(onClearBoard) });
+    };
+
+    const flipBoard = () => {
+        onFlipBoard?.();
+        setupDebug('flip:called-parent', { hasParentHandler: Boolean(onFlipBoard) });
+    };
+
+    const handleToolbarPress = (action) => (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        handledToolbarPressRef.current = true;
+        action();
+    };
+
+    const handleToolbarClick = (action) => (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        if (handledToolbarPressRef.current) {
+            handledToolbarPressRef.current = false;
+            return;
+        }
+
+        action();
     };
 
     return (
@@ -215,10 +265,40 @@ const SetUpPositionView = ({
                             <option>White to move</option>
                             <option>Black to move</option>
                         </select>
-                        <div className="flex items-center justify-center gap-4 text-[#bab9b8]">
-                            <button title="Flip Board" className="hover:text-white transition-colors"><Repeat2 size={18}/></button>
-                            <button title="Reset" className="hover:text-white transition-colors"><RotateCw size={18}/></button>
-                            <button title="Clear" className="hover:text-white transition-colors"><Trash2 size={18}/></button>
+                        <div className="relative z-20 flex shrink-0 items-center justify-center gap-4 text-[#bab9b8]">
+                            <button
+                                type="button"
+                                aria-label="Flip board"
+                                title="Flip Board"
+                                onMouseDown={handleToolbarPress(flipBoard)}
+                                onTouchStart={handleToolbarPress(flipBoard)}
+                                onClick={handleToolbarClick(flipBoard)}
+                                className="relative z-20 cursor-pointer p-1 hover:text-white transition-colors"
+                            >
+                                <Repeat2 size={18}/>
+                            </button>
+                            <button
+                                type="button"
+                                aria-label="Reset board"
+                                title="Reset Board"
+                                onMouseDown={handleToolbarPress(resetBoard)}
+                                onTouchStart={handleToolbarPress(resetBoard)}
+                                onClick={handleToolbarClick(resetBoard)}
+                                className="relative z-20 cursor-pointer p-1 hover:text-white transition-colors"
+                            >
+                                <RotateCw size={18}/>
+                            </button>
+                            <button
+                                type="button"
+                                aria-label="Clear board"
+                                title="Clear Board"
+                                onMouseDown={handleToolbarPress(clearBoard)}
+                                onTouchStart={handleToolbarPress(clearBoard)}
+                                onClick={handleToolbarClick(clearBoard)}
+                                className="relative z-20 cursor-pointer p-1 hover:text-white transition-colors"
+                            >
+                                <Trash2 size={18}/>
+                            </button>
                         </div>
                     </div>
 
@@ -273,7 +353,7 @@ const SetUpPositionView = ({
                 </div>
                 <div className="flex justify-center items-center text-[#8b8987] pb-1">
                      <div className='flex gap-7'>
-                        <FooterAction icon={<New size={20} />} label="New" onClick={onBack} />
+                        <FooterAction icon={<New size={20} />} label="New" onClick={onNewClick || onBack} />
                         <FooterAction icon={<Save size={20} />} label="Save" onClick={onSaveClick} disabled={!canSave} />
                         <FooterAction icon={<Review size={20} />} label="Review" onClick={onReviewClick} disabled={!canReview} />
                         <FooterAction icon={<MoreHorizontal size={20} />} label="" />

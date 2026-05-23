@@ -160,6 +160,14 @@ const normalizeSetupFen = (fen, turn = 'w') => {
     return parts.join(' ');
 };
 
+const CLEAR_BOARD_FEN = '8/8/8/8/8/8/8/8 w - - 0 1';
+
+const createSetupChess = (fen) => new Chess(fen || CLEAR_BOARD_FEN, { skipValidation: true });
+const ANALYZE_SETUP_DEBUG = false;
+const analyzeSetupDebug = (...args) => {
+    if (ANALYZE_SETUP_DEBUG) console.log('[AnalyzeBoard setup]', ...args);
+};
+
 const buildBotAnalysisGame = (data = {}, userAvatarSrc = '') => {
     const bot = findBotByGameData(data);
     const username = localStorage.getItem('chessUsername') || 'You';
@@ -307,7 +315,7 @@ const AnalyzeBoard = () => {
     const [sandboxLastMove, setSandboxLastMove] = useState({ from: null, to: null });
     const [viewIndex, setViewIndex] = useState(-1);
     const [openingName, setOpeningName] = useState("");
-    const [isFlipped] = useState(false);
+    const [isFlipped, setIsFlipped] = useState(false);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
     const [isNewModalOpen, setIsNewModalOpen] = useState(false);
@@ -333,9 +341,12 @@ const AnalyzeBoard = () => {
     const [lastSavedGameSignature, setLastSavedGameSignature] = useState(null);
     const [analysisPanelTab, setAnalysisPanelTab] = useState(isAnalysisExplorerRoute ? 'explore' : 'analysis');
     const [hasLoadedSetupPosition, setHasLoadedSetupPosition] = useState(false);
+    const [showCustomPositionMenu, setShowCustomPositionMenu] = useState(false);
     const [setupTurn, setSetupTurn] = useState('w');
     const autoStartedBotReviewRef = useRef(null);
     const autoStartedMasterReviewRef = useRef(null);
+    const autoStartedPgnReviewRef = useRef(null);
+    const isResettingAnalysisRef = useRef(false);
     
 
     const {
@@ -395,6 +406,7 @@ const AnalyzeBoard = () => {
             if (data.masterReviewStarted) setMasterReviewStarted(true);
             if (data.analysisSessionId) setAnalysisSessionId(data.analysisSessionId);
             if (data.hasLoadedSetupPosition) setHasLoadedSetupPosition(true);
+            if (typeof data.showCustomPositionMenu === 'boolean') setShowCustomPositionMenu(data.showCustomPositionMenu);
 
             if (data.startingFen) {
                 setSandboxStartingFen(data.startingFen);
@@ -462,6 +474,7 @@ const AnalyzeBoard = () => {
             });
                 setCollectionSavedGame(game);
                 setHasLoadedSetupPosition(Boolean(game.startingFen && game.startingFen !== DEFAULT_FEN && parsedHistory.length === 0));
+                setShowCustomPositionMenu(false);
             setLastSavedGameSignature(getGameSaveSignature(parsedHistory, startingFen));
             setMasterReviewGame(null);
             setMasterReviewStarted(isFinishedSavedGame);
@@ -513,6 +526,7 @@ const AnalyzeBoard = () => {
             setCollectionContext(null);
             setCollectionSavedGame(game);
             setHasLoadedSetupPosition(Boolean(game.startingFen && game.startingFen !== DEFAULT_FEN && parsedHistory.length === 0));
+            setShowCustomPositionMenu(false);
             setLastSavedGameSignature(getGameSaveSignature(parsedHistory, startingFen));
             setMasterReviewGame(null);
             setMasterReviewStarted(Boolean(game.analysisHistory?.length));
@@ -741,9 +755,10 @@ const AnalyzeBoard = () => {
             masterReviewStarted,
             analysisSessionId,
             hasLoadedSetupPosition,
+            showCustomPositionMenu,
         };
         localStorage.setItem('chess_analysis_cache', JSON.stringify(cache));
-    }, [isMasterReviewRoute, isCollectionAnalysisRoute, isSavedAnalysisRoute, isPgnReviewRoute, isBotSelfAnalysisRoute, isBotReviewRoute, sandboxFen, sandboxHistory, sandboxLastMove, openingName, sandboxStartingFen, initialAnalysis, sandboxResult, sandboxGameInfo, panelNotice, isSandboxReviewComplete, masterReviewStarted, analysisSessionId, hasLoadedSetupPosition]);
+    }, [isMasterReviewRoute, isCollectionAnalysisRoute, isSavedAnalysisRoute, isPgnReviewRoute, isBotSelfAnalysisRoute, isBotReviewRoute, sandboxFen, sandboxHistory, sandboxLastMove, openingName, sandboxStartingFen, initialAnalysis, sandboxResult, sandboxGameInfo, panelNotice, isSandboxReviewComplete, masterReviewStarted, analysisSessionId, hasLoadedSetupPosition, showCustomPositionMenu]);
 
     useEffect(() => {
         if (!isPgnReviewRoute || sandboxHistory.length === 0) return;
@@ -1217,9 +1232,19 @@ const handleFullReview = async ({ stayOnIntro = false } = {}) => {
                 // Activity tracking should not block review.
             }
             if (isPgnReviewRoute) {
+                setSandboxGameInfo((current) => ({
+                    ...(current || {}),
+                    white: current?.white || 'White',
+                    black: current?.black || 'Black',
+                    white_accuracy: res.data.white_accuracy,
+                    black_accuracy: res.data.black_accuracy,
+                }));
+
                 const reviewId = pgnGameId || analysisSessionId || createAnalysisSessionId();
                 saveAnalysisGameToSavedList(buildCurrentSandboxSavedGame(reviewId, reviewedHistory, {
                     opening: res.data.analysis[0]?.opening || openingName || sandboxGameInfo?.opening || '',
+                    white_accuracy: res.data.white_accuracy,
+                    black_accuracy: res.data.black_accuracy,
                 }));
                 setLastSavedGameSignature(getGameSaveSignature(reviewedHistory, sandboxStartingFen));
             }
@@ -1289,8 +1314,18 @@ const handleFullReview = async ({ stayOnIntro = false } = {}) => {
         handleFullReview({ stayOnIntro: true });
     }, [isMasterReviewRoute, masterReviewGameId, masterReviewGame, masterReviewStarted, isAnalyzing]);
 
+    useEffect(() => {
+        if (!isPgnReviewRoute || !pgnGameId || sandboxHistory.length === 0 || masterReviewStarted || isAnalyzing) return;
+        if (sandboxGameInfo?.white_accuracy != null || sandboxGameInfo?.black_accuracy != null) return;
+        if (sandboxHistory.some((move) => move?.analysisLabel)) return;
+        if (autoStartedPgnReviewRef.current === pgnGameId) return;
+
+        autoStartedPgnReviewRef.current = pgnGameId;
+        handleFullReview({ stayOnIntro: true });
+    }, [isPgnReviewRoute, pgnGameId, sandboxHistory, masterReviewStarted, isAnalyzing, sandboxGameInfo]);
+
     const handleStartReviewFromIntro = () => {
-        const isStoredReviewRoute = isBotReviewRoute || isMasterReviewRoute || isCollectionReviewRoute;
+        const isStoredReviewRoute = isPgnReviewRoute || isBotReviewRoute || isMasterReviewRoute || isCollectionReviewRoute;
 
         if (isStoredReviewRoute && isAnalyzing) {
             setMasterReviewStarted(true);
@@ -1304,6 +1339,8 @@ const handleFullReview = async ({ stayOnIntro = false } = {}) => {
         const hasStoredReview = isStoredReviewRoute && (
             masterReviewGame?.white_accuracy != null ||
             masterReviewGame?.black_accuracy != null ||
+            sandboxGameInfo?.white_accuracy != null ||
+            sandboxGameInfo?.black_accuracy != null ||
             sandboxHistory.some((move) => move?.analysisLabel)
         );
 
@@ -1380,6 +1417,7 @@ const handleFullReview = async ({ stayOnIntro = false } = {}) => {
         setSandboxResult(importedAnalysis?.result || '');
         setSandboxGameInfo(importedAnalysis ? buildGameInfoFromMetadata(importedAnalysis.metadata, importedAnalysis.result) : null);
         setHasLoadedSetupPosition(Boolean(importedAnalysis?.type === 'fen' && importedHistory.length === 0 && startingFen !== DEFAULT_FEN));
+        setShowCustomPositionMenu(false);
         setIsSandboxReviewComplete(false);
         setMasterReviewStarted(false);
         setIsSandboxReviewLocked(false);
@@ -1434,10 +1472,25 @@ const handleFullReview = async ({ stayOnIntro = false } = {}) => {
         }
     }, [isAnalysisExplorerRoute, initialAnalysis, sandboxHistory.length, sandboxFen, isAnalyzing]);
 
+    const commitSetupBoardFen = useCallback((nextFen) => {
+        if (isResettingAnalysisRef.current) return;
+        const normalizedFen = normalizeSetupFen(nextFen, setupTurn);
+        setSandboxFen(normalizedFen);
+        setSandboxStartingFen(normalizedFen);
+        setIsSandboxReviewComplete(false);
+        setIsSandboxReviewLocked(false);
+        setMasterReviewStarted(false);
+        if (sandboxHistory.length === 0) {
+            setAnalysisSessionId(createAnalysisSessionId());
+        }
+    }, [setupTurn, sandboxHistory.length]);
+
     const handleMouseDown = (e, row, col) => {
     if (previewFen) return;
 
     const square = getSquareName(row, col);
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
 
     // --- DEBUG LOGOK ---
     console.log("--- CLICK DEBUG ---");
@@ -1446,53 +1499,52 @@ const handleFullReview = async ({ stayOnIntro = false } = {}) => {
     console.log("Kijelölt Setup bábu (selectedSetupPiece):", selectedSetupPiece);
 
     // --- SETUP MÓD LOGIKA ---
-    // Akkor fut le, ha a 'setup' nézetben vagyunk ÉS van kiválasztott bábu a katalógusból
-    if (rightPanelMode === 'setup' && selectedSetupPiece) {
-        console.log("=> SETUP ACTION: Bábu elhelyezése...");
-        
-        const chess = new Chess(sandboxFen);
-        
-        // Meghatározzuk a bábu típusát és színét (Nagybetű = Világos, Kisbetű = Sötét)
-        const type = selectedSetupPiece.toLowerCase();
-        const color = selectedSetupPiece === selectedSetupPiece.toUpperCase() ? 'w' : 'b';
+    // Pozíciószerkesztőben nincs legális lépés, hang vagy sakk-szabály szerinti célmező.
+    if (rightPanelMode === 'setup') {
+        e.preventDefault();
+        setValidMoves([]);
 
-        // Eltávolítjuk a mezőn lévő esetleges régi bábut, és letesszük az újat
-        chess.remove(square);
-        const success = chess.put({ type, color }, square);
+        const chess = createSetupChess(sandboxFen);
+        const pieceOnSquare = chess.get(square);
 
-        if (success) {
-            const newFen = normalizeSetupFen(chess.fen(), setupTurn);
-            console.log("=> SIKER: Új FEN generálva:", newFen);
-            
-            setSandboxFen(newFen);
-            // Setup módban a kiinduló állást is frissítjük, hogy az elemzés alapja ez legyen
-            setSandboxStartingFen(newFen); 
-            setIsSandboxReviewComplete(false);
-            setIsSandboxReviewLocked(false);
-            setMasterReviewStarted(false);
-            if (sandboxHistory.length === 0) {
-                setAnalysisSessionId(createAnalysisSessionId());
-            }
-            
-            playSound('move');
-        } else {
-            console.error("=> HIBA: A chess.put nem sikerült ezen a mezőn!");
+        if (pieceOnSquare) {
+            setMousePos({ x: clientX, y: clientY });
+            setSelectedSquare(square);
+            setHoverSquare(square);
+            setIsDragging(true);
+            setValidMoves([]);
+
+            const rect = e.currentTarget.getBoundingClientRect();
+            setDragOffset({
+                x: clientX - (rect.left + rect.width / 2),
+                y: clientY - (rect.top + rect.height / 2)
+            });
+            return;
         }
 
-        return; // MEGSZAKÍTJUK a függvényt, hogy ne induljon el a normál drag & drop
+        if (selectedSetupPiece) {
+            const type = selectedSetupPiece.toLowerCase();
+            const color = selectedSetupPiece === selectedSetupPiece.toUpperCase() ? 'w' : 'b';
+
+            chess.remove(square);
+            if (chess.put({ type, color }, square)) {
+                commitSetupBoardFen(chess.fen());
+            }
+            return;
+        }
+
+        return;
     }
 
     // --- EREDETI DRAG & DROP LOGIKA ---
-    // Ez csak akkor fut le, ha NEM setup módban vagyunk, vagy nincs kijelölt bábu
+    // Ez csak akkor fut le, ha NEM setup módban vagyunk.
     console.log("=> NORMÁL MÓD: Lépéskezelés indítása...");
 
     if (sandboxStatus !== 'ongoing' || isSandboxReviewLocked || isSandboxReviewComplete) {
         return;
     }
 
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    const chess = new Chess(sandboxFen);
+    const chess = createSetupChess(sandboxFen);
     const piece = chess.get(square);
 
     // Ha már van kijelölt mezőnk és egy érvényes célmezőre kattintunk (kattintás-kattintás lépés)
@@ -1528,23 +1580,15 @@ const handleExternalDrop = (e, row, col) => {
     if (!piece) return;
 
     const square = getSquareName(row, col);
-    const chess = new Chess(sandboxFen);
+    const chess = createSetupChess(sandboxFen);
     
     const type = piece.toLowerCase();
     const color = piece === piece.toUpperCase() ? 'w' : 'b';
 
     // Tábla frissítése: régi törlése, új lerakása
     chess.remove(square);
-    chess.put({ type, color }, square);
-
-    const newFen = normalizeSetupFen(chess.fen(), setupTurn);
-    setSandboxFen(newFen);
-    setSandboxStartingFen(newFen);
-    setIsSandboxReviewComplete(false);
-    setMasterReviewStarted(false);
-    setIsSandboxReviewLocked(false);
-    if (sandboxHistory.length === 0) {
-        setAnalysisSessionId(createAnalysisSessionId());
+    if (chess.put({ type, color }, square)) {
+        commitSetupBoardFen(chess.fen());
     }
 };
 
@@ -1558,6 +1602,25 @@ const handleExternalDrop = (e, row, col) => {
         setValidMoves([]);
         setHoverSquare(null);
 
+        if (rightPanelMode === 'setup') {
+            const chess = createSetupChess(sandboxFen);
+            const piece = selectedSetupPiece && target === from
+                ? {
+                    type: selectedSetupPiece.toLowerCase(),
+                    color: selectedSetupPiece === selectedSetupPiece.toUpperCase() ? 'w' : 'b',
+                }
+                : chess.get(from);
+
+            if (!target || !piece) return;
+
+            chess.remove(from);
+            chess.remove(target);
+            if (chess.put(piece, target)) {
+                commitSetupBoardFen(chess.fen());
+            }
+            return;
+        }
+
         if (!target || target === from) return;
 
         const chess = new Chess(sandboxFen);
@@ -1568,7 +1631,7 @@ const handleExternalDrop = (e, row, col) => {
         } else {
             playSound('illegal');
         }
-    }, [isDragging, selectedSquare, hoverSquare, sandboxFen, playSound, executeAnalysisMove]);
+    }, [isDragging, selectedSquare, hoverSquare, rightPanelMode, sandboxFen, playSound, executeAnalysisMove, commitSetupBoardFen]);
 
     useEffect(() => {
         const handleMove = (e) => {
@@ -1622,7 +1685,11 @@ const handleExternalDrop = (e, row, col) => {
     const resultLabel = getResultLabel(sandboxStatus, sandboxFen);
     const displayedResultLabel = sandboxResult || resultLabel;
     const currentSaveSignature = getGameSaveSignature(sandboxHistory, sandboxStartingFen);
-    const canSaveCurrentAnalysis = (sandboxHistory.length > 0 || hasLoadedSetupPosition) && currentSaveSignature !== lastSavedGameSignature;
+    const hasSaveableAnalysis = sandboxHistory.length > 0 || hasLoadedSetupPosition;
+    const canSaveCurrentAnalysis = hasSaveableAnalysis && (
+        currentSaveSignature !== lastSavedGameSignature ||
+        (isPgnReviewRoute && sandboxHistory.length > 0 && !collectionSavedGame)
+    );
     const canReviewCurrentAnalysis = sandboxHistory.length > 0;
     const savedFen = getLatestHistoryFen(sandboxHistory, sandboxFen);
     const boardGameInfo = sandboxGameInfo || masterReviewGame;
@@ -1639,6 +1706,8 @@ const handleExternalDrop = (e, row, col) => {
         opening: openingName || sandboxGameInfo?.opening || '',
         eco: sandboxGameInfo?.eco || '',
         moves: sandboxHistory.map((move) => move.san || move.m).join(' '),
+        white_accuracy: sandboxGameInfo?.white_accuracy,
+        black_accuracy: sandboxGameInfo?.black_accuracy,
     } : null;
 
     const savedAnalysisGame = masterReviewGame ? {
@@ -1673,6 +1742,8 @@ const handleExternalDrop = (e, row, col) => {
         startingFen: sandboxStartingFen,
         initialAnalysis,
         gameInfo: sandboxGameInfo,
+        white_accuracy: collectionSavedGame?.white_accuracy ?? sandboxGameInfo?.white_accuracy,
+        black_accuracy: collectionSavedGame?.black_accuracy ?? sandboxGameInfo?.black_accuracy,
         addedAt: new Date().toISOString(),
     };
     const collectionReviewGame = isCollectionReviewRoute && collectionSavedGame ? {
@@ -1686,6 +1757,7 @@ const handleExternalDrop = (e, row, col) => {
     } : null;
 
     const resetSandboxAnalysis = () => {
+        isResettingAnalysisRef.current = true;
         setSandboxFen(DEFAULT_FEN);
         setSandboxHistory([]);
         setSandboxStartingFen(DEFAULT_FEN);
@@ -1704,6 +1776,9 @@ const handleExternalDrop = (e, row, col) => {
         setPendingPromotion(null);
         setRightPanelMode('analysis');
         setSelectedSetupPiece(null);
+        setSelectedSquare(null);
+        setValidMoves([]);
+        setHoverSquare(null);
         setIsDragging(false);
         setIsNewModalOpen(false);
         setAnalysisSessionId(createAnalysisSessionId());
@@ -1711,7 +1786,73 @@ const handleExternalDrop = (e, row, col) => {
         setCollectionSavedGame(null);
         setLastSavedGameSignature(null);
         setHasLoadedSetupPosition(false);
+        setShowCustomPositionMenu(false);
         localStorage.removeItem('chess_analysis_cache');
+        window.setTimeout(() => {
+            isResettingAnalysisRef.current = false;
+            setSandboxFen(DEFAULT_FEN);
+            setSandboxStartingFen(DEFAULT_FEN);
+            setSandboxLastMove({ from: null, to: null });
+            setPreviewFen(null);
+        }, 0);
+    };
+
+    const startFreshAnalysis = () => {
+        resetSandboxAnalysis();
+        navigate('/analysis', { replace: true });
+    };
+
+    const applySetupBoardFen = (nextFen, nextTurn = 'w') => {
+        const normalizedFen = normalizeSetupFen(nextFen, nextTurn);
+        analyzeSetupDebug('applySetupBoardFen', { nextFen, nextTurn, normalizedFen });
+        setSetupTurn(nextTurn);
+        setSandboxFen(normalizedFen);
+        setSandboxStartingFen(normalizedFen);
+        setSandboxHistory([]);
+        setSandboxLastMove({ from: null, to: null });
+        setViewIndex(-1);
+        setOpeningName("");
+        setInitialAnalysis(null);
+        setPanelNotice('');
+        setSandboxResult('');
+        setSandboxGameInfo(null);
+        setPreviewFen(null);
+        setPendingPromotion(null);
+        setSelectedSetupPiece(null);
+        setIsDragging(false);
+        setIsSandboxReviewComplete(false);
+        setMasterReviewStarted(false);
+        setIsSandboxReviewLocked(false);
+        setAnalysisSessionId(createAnalysisSessionId());
+        setHasLoadedSetupPosition(false);
+        setShowCustomPositionMenu(false);
+    };
+
+    const returnToAnalysisMenuFromSetup = () => {
+        const normalizedFen = normalizeSetupFen(sandboxFen, setupTurn);
+        analyzeSetupDebug('returnToAnalysisMenuFromSetup', { sandboxFen, setupTurn, normalizedFen });
+        setSetupTurn(setupTurn);
+        setSandboxFen(normalizedFen);
+        setSandboxStartingFen(normalizedFen);
+        setSandboxHistory([]);
+        setSandboxLastMove({ from: null, to: null });
+        setViewIndex(-1);
+        setOpeningName("");
+        setInitialAnalysis(null);
+        setPanelNotice('');
+        setSandboxResult('');
+        setSandboxGameInfo(null);
+        setPreviewFen(null);
+        setPendingPromotion(null);
+        setSelectedSetupPiece(null);
+        setIsDragging(false);
+        setIsSandboxReviewComplete(false);
+        setMasterReviewStarted(false);
+        setIsSandboxReviewLocked(false);
+        setAnalysisSessionId(createAnalysisSessionId());
+        setHasLoadedSetupPosition(normalizedFen !== DEFAULT_FEN);
+        setShowCustomPositionMenu(normalizedFen !== DEFAULT_FEN);
+        setRightPanelMode('analysis');
     };
 
     const handleViewMove = (idx, options = {}) => {
@@ -1811,6 +1952,7 @@ const handleExternalDrop = (e, row, col) => {
         setRightPanelMode('analysis');
         setAnalysisPanelTab('analysis');
         setHasLoadedSetupPosition(false);
+        setShowCustomPositionMenu(false);
         setSandboxGameInfo({
             white: game?.iWasWhite ? (localStorage.getItem('chessUsername') || 'White') : (game?.opponent || 'Black'),
             black: game?.iWasWhite ? (game?.opponent || 'Black') : (localStorage.getItem('chessUsername') || 'White'),
@@ -1909,10 +2051,10 @@ const handleExternalDrop = (e, row, col) => {
             <div className="w-[480px] h-[744px] shrink-0 relative box-border">
             {rightPanelMode === 'setup' ? (
             <SetUpPositionView 
-                onBack={() => {
-                    setRightPanelMode('analysis');
-                    setSelectedSetupPiece(null);
-                    setIsDragging(false);
+                onBack={returnToAnalysisMenuFromSetup}
+                onNewClick={() => {
+                    resetSandboxAnalysis();
+                    navigate('/analysis', { replace: true });
                 }}
                 currentFen={sandboxFen}
                 setupTurn={setupTurn}
@@ -1921,9 +2063,24 @@ const handleExternalDrop = (e, row, col) => {
                 setIsDragging={setIsDragging}
                 isDragging={isDragging}
                 onPieceSelect={setSelectedSetupPiece}
+                onFlipBoard={() => {
+                    analyzeSetupDebug('onFlipBoard:before');
+                    setIsFlipped((flipped) => {
+                        analyzeSetupDebug('onFlipBoard:setter', { before: flipped, after: !flipped });
+                        return !flipped;
+                    });
+                }}
+                onResetBoard={() => {
+                    analyzeSetupDebug('onResetBoard');
+                    applySetupBoardFen(DEFAULT_FEN, 'w');
+                }}
+                onClearBoard={() => {
+                    analyzeSetupDebug('onClearBoard');
+                    applySetupBoardFen(CLEAR_BOARD_FEN, 'w');
+                }}
                 onFenChange={(newFen) => {
                     try {
-                        const parsed = new Chess(newFen);
+                        const parsed = new Chess(newFen, { skipValidation: true });
                         const nextTurn = parsed.turn();
                         setSetupTurn(nextTurn);
                         setSandboxFen(normalizeSetupFen(newFen, nextTurn));
@@ -1935,8 +2092,7 @@ const handleExternalDrop = (e, row, col) => {
     
                 onLoadConfirm={async (finalFen) => {
                 const normalizedFinalFen = normalizeSetupFen(finalFen, setupTurn);
-                const chess = new Chess(normalizedFinalFen);
-                const turn = chess.turn();
+                const turn = normalizedFinalFen.split(/\s+/)[1] === 'b' ? 'b' : 'w';
                 setIsDragging(false);
                 setSelectedSetupPiece(null);
 
@@ -1955,6 +2111,7 @@ const handleExternalDrop = (e, row, col) => {
                 setSandboxHistory([]); 
                 setAnalysisSessionId(createAnalysisSessionId());
                 setHasLoadedSetupPosition(true);
+                setShowCustomPositionMenu(false);
                 setRightPanelMode('analysis');
                 setIsAnalyzing(true);
                 try {
@@ -2010,8 +2167,9 @@ const handleExternalDrop = (e, row, col) => {
                 history={sandboxHistory}
                 isReviewing={isAnalyzing}
                 reviewStarted={masterReviewStarted}
-                onStartReview={handleFullReview}
+                onStartReview={handleStartReviewFromIntro}
                 showPhaseSummary={false}
+                allowStartDuringReview
             />
             ) : isCollectionReviewRoute && collectionReviewGame && !masterReviewStarted ? (
             <MasterReviewIntro
@@ -2076,11 +2234,13 @@ const handleExternalDrop = (e, row, col) => {
                 reviewMode={masterReviewStarted && (isPgnReviewRoute || isMasterReviewRoute || isBotReviewRoute || isCollectionReviewRoute)}
                 hideMoveJudgement={masterReviewStarted && (isPgnReviewRoute || isMasterReviewRoute || isBotReviewRoute || isCollectionReviewRoute)}
                 hasStartingPosition={isCollectionAnalysisRoute || isSavedAnalysisRoute || isPgnReviewRoute || isBotSelfAnalysisRoute || isBotReviewRoute || viewIndex <= -2 || Boolean(initialAnalysis)}
+                showEmptyMenuForCustomPosition={showCustomPositionMenu && sandboxHistory.length === 0 && !initialAnalysis}
                 showOnlyActiveMoveLabels={isBotSelfAnalysisRoute}
                 revealedMoveLabelIndex={isBotSelfAnalysisRoute ? revealedBotAnalysisIndex : null}
                 onSetupClick={() => {
+                    analyzeSetupDebug('onSetupClick', { sandboxFen });
                     try {
-                        setSetupTurn(new Chess(sandboxFen).turn());
+                        setSetupTurn(new Chess(sandboxFen, { skipValidation: true }).turn());
                     } catch {
                         setSetupTurn('w');
                     }
@@ -2114,7 +2274,7 @@ const handleExternalDrop = (e, row, col) => {
                 <NewAnalysisModal
                     isOpen={isNewModalOpen}
                     onClose={() => setIsNewModalOpen(false)}
-                    onConfirm={resetSandboxAnalysis}
+                    onConfirm={startFreshAnalysis}
                 />
             </AnimatePresence>
         </div>

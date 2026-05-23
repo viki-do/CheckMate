@@ -828,6 +828,7 @@ const AnalysisPanel = ({
     reviewMode = false,
     hideMoveJudgement = false,
     hasStartingPosition = false,
+    showEmptyMenuForCustomPosition = false,
     showOnlyActiveMoveLabels = false,
     revealedMoveLabelIndex = null,
     apiBase,
@@ -839,7 +840,7 @@ const AnalysisPanel = ({
     const [isDeleteCollectionOpen, setIsDeleteCollectionOpen] = useState(false);
     const [utilityView, setUtilityView] = useState(null);
     const showCollectionSettings = collectionSettingsMode || isCollectionSettingsOpen;
-    const isActive = history.length > 0 || Boolean(initialAnalysis) || (currentFen && currentFen !== DEFAULT_FEN);
+    const isActive = history.length > 0 || Boolean(initialAnalysis) || (!showEmptyMenuForCustomPosition && currentFen && currentFen !== DEFAULT_FEN);
     const shouldShowActiveView = isActive || activeTab === 'explore';
     const isGameHistoryOpen = utilityView === 'gameHistory';
     const currentMoveData = getCurrentMoveData({ history, viewIndex, currentFen, initialAnalysis });
