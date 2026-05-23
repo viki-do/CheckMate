@@ -25,6 +25,7 @@ export const useChessGame = () => {
     const [premoves, setPremoves] = useState([]);
     const [history, setHistory] = useState([]);
     const [status, setStatus] = useState("");
+    const [result, setResult] = useState("");
     const [isDragging, setIsDragging] = useState(false);
     const [viewIndex, setViewIndex] = useState(-1);
     const [isAlert, setIsAlert] = useState(false);
@@ -154,6 +155,7 @@ export const useChessGame = () => {
                 lastPlayedMoveNum.current = moveCount;
 
                 if (res.data.status) setStatus(res.data.status);
+                setResult(res.data.result || "");
                 if (res.data.opening) setOpening(res.data.opening);
 
                 return res.data; 
@@ -173,6 +175,7 @@ export const useChessGame = () => {
         setPremoves([]);
         setHistory([]);
         setStatus("");
+        setResult("");
         setReason("");
         setViewIndex(-1);
         setActiveTimeColor(null);
@@ -190,12 +193,14 @@ export const useChessGame = () => {
         setHistory([]);
         setActiveTimeColor(null);
         setStatus(""); 
+        setResult("");
         setReason("");
     },[]);
 
     const startNewGame = useCallback(async (bot, color = 'white', timeControl) => {
         setGameId(null);
         setStatus("");
+        setResult("");
         setHistory([]);
         premovesRef.current = [];
         setPremoves([]);
@@ -220,6 +225,7 @@ export const useChessGame = () => {
         setOpening(null);
         setHistory(createStartHistory(initialTime));
         setReason("");
+        setResult("");
         setStatus("ongoing");
         setViewIndex(-1);
         setWhiteTime(initialTime);
@@ -915,7 +921,7 @@ useEffect(() => {
     return {
         gameId, setGameId, fen, setFen, selectedSquare, setSelectedSquare, validMoves, setValidMoves,
         premoves, setPremoves,
-        lastMove, setLastMove, history, setHistory, status, setStatus, isDragging, setIsDragging,
+        lastMove, setLastMove, history, setHistory, status, setStatus, result, setResult, isDragging, setIsDragging,
         viewIndex, setViewIndex, isAlert, setIsAlert, mousePos, setMousePos, dragOffset, setDragOffset,
         hoverSquare, setHoverSquare, getSquareName, fetchGameState, startNewGame, handleResign,
         executeMove, playSound, token, API_BASE, reason, setReason, pendingPromotion, setPendingPromotion,

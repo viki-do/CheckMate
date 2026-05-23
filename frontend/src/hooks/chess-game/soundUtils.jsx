@@ -8,6 +8,8 @@ export const getMoveSoundName = (san) => {
     return 'move';
 };
 
+const getMoveNotation = (move) => move?.m || move?.san || move?.notation || null;
+
 const normalizeHistoryIndex = (index, historyLength) => {
     if (index === -1) return historyLength - 1;
     const parsed = Number.parseInt(index, 10);
@@ -18,12 +20,21 @@ const normalizeHistoryIndex = (index, historyLength) => {
 export const getHistoryNavigationSoundName = (history = [], currentIndex = -1, nextIndex = -1) => {
     if (!history.length) return null;
 
+    const rawCurrent = Number.parseInt(currentIndex, 10);
+    const rawNext = Number.parseInt(nextIndex, 10);
+    const isAtStartingPosition = Number.isFinite(rawCurrent) && rawCurrent <= -2;
+    const goesToStartingPosition = Number.isFinite(rawNext) && rawNext <= -2;
+
+    if ((isAtStartingPosition && rawNext === 0) || (rawCurrent === 0 && goesToStartingPosition)) {
+        return getMoveSoundName(getMoveNotation(history[0]));
+    }
+
     const current = normalizeHistoryIndex(currentIndex, history.length);
     const next = normalizeHistoryIndex(nextIndex, history.length);
     if (current === next) return null;
 
     const soundMove = history[next];
-    return getMoveSoundName(soundMove?.m);
+    return getMoveSoundName(getMoveNotation(soundMove));
 };
 
 export const getReplayPositionSoundName = (history = [], currentPosition = 0, nextPosition = 0) => {
@@ -31,8 +42,10 @@ export const getReplayPositionSoundName = (history = [], currentPosition = 0, ne
     const next = Math.max(0, Math.min(history.length, Number(nextPosition) || 0));
     if (current === next) return null;
 
-    const soundMove = next > current ? history[next - 1] : history[current - 1];
-    return getMoveSoundName(soundMove?.m);
+    if (next === 0) return null;
+
+    const soundMove = history[next - 1];
+    return getMoveSoundName(getMoveNotation(soundMove));
 };
 
 export const getMoveAttemptSoundName = (chess, moveAttempt) => {

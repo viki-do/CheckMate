@@ -1,25 +1,39 @@
 import { formatNumber, percent } from '../../utils/databaseFormatters';
 
 const ResultBar = ({ label, total, wins, draws, losses }) => {
-  const winPct = percent(wins, total);
-  const drawPct = percent(draws, total);
-  const lossPct = percent(losses, total);
+  const safeTotal = Number(total) || 0;
+  const safeWins = Number(wins) || 0;
+  const safeDraws = Number(draws) || 0;
+  const explicitLosses = losses === undefined || losses === null ? null : Number(losses) || 0;
+  const remainderLosses = Math.max(0, safeTotal - safeWins - safeDraws);
+  const safeLosses = explicitLosses === null
+    ? remainderLosses
+    : Math.max(explicitLosses, remainderLosses);
+  const winPct = percent(safeWins, safeTotal);
+  const drawPct = percent(safeDraws, safeTotal);
+  const lossPct = percent(safeLosses, safeTotal);
+  const segments = [
+    { key: 'win', label: 'Win', value: winPct, color: 'bg-[#f0efed]', text: 'text-[#33312e]' },
+    { key: 'draw', label: 'Draw', value: drawPct, color: 'bg-[#676560]', text: 'text-white' },
+    { key: 'loss', label: 'Loss', value: lossPct, color: 'bg-[#3e3c39]', text: 'text-white' },
+  ];
 
   return (
     <div>
       <div className="text-[#bab9b8] font-bold text-lg mb-1">
-        {label} <span className="text-white">{formatNumber(total)}</span>
+        {label} <span className="text-white">{formatNumber(safeTotal)}</span>
       </div>
       <div className="h-7 w-full bg-[#3c3a37] overflow-hidden flex text-sm font-bold">
-        <div className="bg-[#f0efed] text-[#33312e] px-2 flex items-center" style={{ width: `${winPct}%`, minWidth: winPct ? 58 : 0 }}>
-          {winPct}% Win
-        </div>
-        <div className="bg-[#676560] text-white px-2 flex items-center justify-end" style={{ width: `${drawPct}%`, minWidth: drawPct ? 62 : 0 }}>
-          {drawPct}% Draw
-        </div>
-        <div className="bg-[#3e3c39] text-white px-2 flex items-center justify-end" style={{ width: `${lossPct}%`, minWidth: lossPct ? 58 : 0 }}>
-          {lossPct}% Loss
-        </div>
+        {segments.map((segment) => (
+          <div
+            key={segment.key}
+            className={`${segment.color} ${segment.text} min-w-0 px-2 flex items-center ${segment.key === 'win' ? 'justify-start' : 'justify-end'}`}
+            style={{ width: `${segment.value}%` }}
+            title={`${segment.value}% ${segment.label}`}
+          >
+            {segment.value >= 13 ? `${segment.value}% ${segment.label}` : ''}
+          </div>
+        ))}
       </div>
     </div>
   );

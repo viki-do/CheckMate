@@ -23,8 +23,8 @@ class ChessCoachEngine:
                 "inaccuracy_cp": 90,
                 "mistake_cp": 180,
                 "blunder_cp": 320,
-                "inaccuracy_loss": 0.04,
-                "mistake_loss": 0.10,
+                "inaccuracy_loss": 0.06,
+                "mistake_loss": 0.12,
                 "blunder_loss": 0.22,
                 "only_move_gap": 0.12,
                 "alt_window": 0.025,
@@ -36,8 +36,8 @@ class ChessCoachEngine:
                 "inaccuracy_cp": 75,
                 "mistake_cp": 150,
                 "blunder_cp": 260,
-                "inaccuracy_loss": 0.035,
-                "mistake_loss": 0.085,
+                "inaccuracy_loss": 0.055,
+                "mistake_loss": 0.11,
                 "blunder_loss": 0.18,
                 "only_move_gap": 0.10,
                 "alt_window": 0.020,
@@ -87,6 +87,11 @@ class ChessCoachEngine:
         if player_best >= 9000 and player_curr < 9000:
             return max(base_loss, 0.16)
 
+        # When a player is already in a decisive lost position, Chess.com's
+        # accuracy is noticeably less punitive for small practical losses.
+        if player_best <= -300 and player_curr <= -500:
+            return base_loss * 0.55
+
         return base_loss
 
     def review_limit(self, depth=None, nodes=None):
@@ -101,7 +106,7 @@ class ChessCoachEngine:
             nodes=nodes or self.PLAYED_MOVE_NODES,
         )
 
-    def analyze_position_deep(self, board, engine, depth=None, multipv=3):
+    def analyze_position_deep(self, board, engine, depth=None, nodes=None, multipv=3):
         book_move = None
         if os.path.exists(self.book_bin_path):
             try:
@@ -111,7 +116,7 @@ class ChessCoachEngine:
             except Exception:
                 pass
 
-        analysis = engine.analyse(board, self.review_limit(depth=depth), multipv=multipv)
+        analysis = engine.analyse(board, self.review_limit(depth=depth, nodes=nodes), multipv=multipv)
         lines = []
         for entry in analysis:
             score = entry["score"].white().score(mate_score=10000)
@@ -230,10 +235,11 @@ class ChessCoachEngine:
             return "best", best_eval
 
         actual_move_info = next((a for a in analysis_list if a.get("pv") and a["pv"][0] == move), None)
-        if played_eval is not None:
-            move_eval = played_eval
-        elif actual_move_info:
+        actual_is_top = bool(best_move_info.get("pv") and best_move_info["pv"][0] == move)
+        if actual_move_info:
             move_eval = actual_move_info["score"].white().score(mate_score=10000)
+        elif played_eval is not None:
+            move_eval = played_eval
         else:
             fallback_base = analysis_list[-1]["score"].white().score(mate_score=10000)
             move_eval = fallback_base - 120 if is_white else fallback_base + 120
@@ -295,6 +301,19 @@ class ChessCoachEngine:
         # the practical win chance barely changes. Prefer the win-chance shape
         # here; this matches Chess.com's tendency to call many lost-position
         # moves excellent/good instead of repeatedly punishing cp loss.
+        if player_best <= -300 and player_curr <= -500:
+            if actual_is_top or loss <= 0.001:
+                return "best", move_eval
+            if loss <= 0.02:
+                return "excellent", move_eval
+            if loss <= 0.07:
+                return "good", move_eval
+            if loss <= 0.16:
+                return "inaccuracy", move_eval
+            if loss <= 0.30:
+                return "mistake", move_eval
+            return "blunder", move_eval
+
         if p_best <= 0.08:
             if loss <= 0.02:
                 return "excellent", move_eval

@@ -21,12 +21,15 @@ const AnalyzeBoardSection = ({
     executeAnalysisMove,
     setMousePos,
     setIsDragging,
+    gameInfo = null,
 }) => (
     <div className="flex flex-col justify-center items-center gap-2">
         <AnalyzePlayerInfo
             color="black"
             pieces={captured.blackSide}
             diff={materialDiff < 0 ? Math.abs(materialDiff) : 0}
+            playerName={gameInfo?.black}
+            playerImage={gameInfo?.black_avatar}
             onDragOver={(e) => {
                 e.preventDefault();
                 e.dataTransfer.dropEffect = "move";
@@ -71,6 +74,8 @@ const AnalyzeBoardSection = ({
             color="white"
             pieces={captured.whiteSide}
             diff={materialDiff > 0 ? materialDiff : 0}
+            playerName={gameInfo?.white}
+            playerImage={gameInfo?.white_avatar}
         />
     </div>
 );

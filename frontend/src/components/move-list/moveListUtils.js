@@ -19,7 +19,14 @@ export const getHistoryIndex = (history, moveObj) => (
 
 export const getFinalResult = ({ isOngoing, isGameOver, result, status, reason }) => {
     if (isOngoing || !isGameOver) return null;
-    if (result) return result;
+    if (result && result !== "*") {
+        if (typeof result === "object") return result;
+        if (result === "1-0") return { score: "1-0", winnerText: "White Won", reasonText: reason || "Game Over" };
+        if (result === "0-1") return { score: "0-1", winnerText: "Black Won", reasonText: reason || "Game Over" };
+        if (result === "1/2-1/2" || result === "1/2" || result === "½-½") {
+            return { score: "½-½", winnerText: "Draw", reasonText: reason || "Game Over" };
+        }
+    }
 
     if (status === "aborted" || (reason && reason.toLowerCase().includes("aborted"))) {
         return { score: "½-½", winnerText: "Game Aborted", reasonText: "Too few moves" };

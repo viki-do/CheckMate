@@ -19,6 +19,94 @@
   scrollbar-width: none;
 }
 
+@utility collection-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #171614 #24231f;
+
+  &::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: #24231f;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: #171614;
+    border: 3px solid #24231f;
+    border-radius: 999px;
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background: #0f0f0e;
+  }
+
+  &::-webkit-scrollbar-button:single-button {
+    display: block;
+    width: 12px;
+    height: 12px;
+    background-color: #24231f;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 7px 7px;
+  }
+
+  &::-webkit-scrollbar-button:single-button:vertical:decrement {
+    background-image: linear-gradient(45deg, transparent 50%, #171614 50%), linear-gradient(135deg, #171614 50%, transparent 50%);
+    background-position: 3px 5px, 6px 5px;
+  }
+
+  &::-webkit-scrollbar-button:single-button:vertical:increment {
+    background-image: linear-gradient(135deg, transparent 50%, #171614 50%), linear-gradient(45deg, #171614 50%, transparent 50%);
+    background-position: 3px 4px, 6px 4px;
+  }
+}
+
+@utility pgn-input-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #171614 #393733;
+
+  &::-webkit-scrollbar {
+    width: 13px;
+    height: 13px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: #393733;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: #171614;
+    border: 3px solid #393733;
+    border-radius: 999px;
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background: #11100f;
+  }
+
+  &::-webkit-scrollbar-button:single-button {
+    display: block;
+    width: 13px;
+    height: 13px;
+    background-color: #393733;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 7px 7px;
+  }
+
+  &::-webkit-scrollbar-button:single-button:vertical:decrement {
+    background-image: linear-gradient(45deg, transparent 50%, #171614 50%), linear-gradient(135deg, #171614 50%, transparent 50%);
+    background-position: 3px 6px, 7px 6px;
+  }
+
+  &::-webkit-scrollbar-button:single-button:vertical:increment {
+    background-image: linear-gradient(135deg, transparent 50%, #171614 50%), linear-gradient(45deg, #171614 50%, transparent 50%);
+    background-position: 3px 5px, 7px 5px;
+  }
+}
+
 @utility check-alert-king {
   /* Megadjuk a kért "erősebb" színeket */
   --alert-strong-dark: #DC2712;

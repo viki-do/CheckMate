@@ -40,12 +40,13 @@ export const getAnalysisColor = (label) => {
     }
 };
 
-export const getVariationFen = (pvUci, currentMoveData) => {
+export const getVariationFen = (pvUci, currentMoveData, moveCount = null) => {
     if (!pvUci || !Array.isArray(pvUci)) return null;
     const baseFen = currentMoveData?.fen || DEFAULT_FEN;
     const tempChess = new Chess(baseFen);
+    const movesToApply = Number.isInteger(moveCount) ? pvUci.slice(0, moveCount) : pvUci;
     try {
-        for (const uci of pvUci) {
+        for (const uci of movesToApply) {
             tempChess.move({
                 from: uci.slice(0, 2),
                 to: uci.slice(2, 4),
@@ -58,20 +59,62 @@ export const getVariationFen = (pvUci, currentMoveData) => {
     }
 };
 
+export const getVariationPreview = (pvUci, currentMoveData, moveCount = null) => {
+    if (!pvUci || !Array.isArray(pvUci)) return { fen: null, lastMove: { from: null, to: null } };
+
+    const baseFen = currentMoveData?.fen || DEFAULT_FEN;
+    const tempChess = new Chess(baseFen);
+    const movesToApply = Number.isInteger(moveCount) ? pvUci.slice(0, moveCount) : pvUci;
+    let lastMove = { from: null, to: null };
+
+    try {
+        for (const uci of movesToApply) {
+            const move = tempChess.move({
+                from: uci.slice(0, 2),
+                to: uci.slice(2, 4),
+                promotion: uci[4] || 'q'
+            });
+            if (move) {
+                lastMove = { from: move.from, to: move.to };
+            }
+        }
+
+        return { fen: tempChess.fen(), lastMove };
+    } catch {
+        return { fen: null, lastMove: { from: null, to: null } };
+    }
+};
+
+const getInitialMoveData = (currentFen, initialAnalysis) => {
+    const safeEval = Number(initialAnalysis?.eval);
+    const engineLines = initialAnalysis?.engineLines || initialAnalysis?.engine_lines || [];
+
+    return {
+        fen: currentFen || DEFAULT_FEN,
+        engineLines,
+        engine_lines: engineLines,
+        eval: Number.isFinite(safeEval) ? safeEval : 0
+    };
+};
+
 export const getCurrentMoveData = ({ history, viewIndex, currentFen, initialAnalysis }) => {
-    if (history.length === 0) {
-        return initialAnalysis ? {
-            fen: currentFen,
-            engineLines: initialAnalysis.engineLines || [],
-            engine_lines: initialAnalysis.engineLines || [],
-            eval: initialAnalysis.eval
-        } : { fen: currentFen, engineLines: [], engine_lines: [] };
+    if (history.length === 0 || viewIndex <= -2) {
+        return getInitialMoveData(currentFen, initialAnalysis);
     }
 
     return viewIndex === -1 ? history[history.length - 1] : history[viewIndex];
 };
 
 export const getDisplayLines = ({ history, viewIndex, initialAnalysis, currentMoveData }) => {
+    if (currentMoveData?.analysisPending) {
+        const currentIndex = viewIndex === -1 ? history.length - 1 : viewIndex;
+        const previousMove = currentIndex > 0 ? history[currentIndex - 1] : null;
+        const previousLines = previousMove?.engineLines || previousMove?.engine_lines || [];
+        if (previousLines.length > 0) return previousLines;
+    }
+    if (viewIndex <= -2 && initialAnalysis) {
+        return currentMoveData.engineLines || currentMoveData.engine_lines || [];
+    }
     if (viewIndex !== -1 && history[viewIndex]) {
         return history[viewIndex].engineLines || history[viewIndex].engine_lines || [];
     }
@@ -123,7 +166,7 @@ export const buildAnalysisMoveRows = ({ history, currentFen, resultLabel, curren
     }
 
     if (resultLabel) {
-        const resultFen = currentMoveData?.fen || currentFen || DEFAULT_FEN;
+        const resultFen = history[history.length - 1]?.fen || currentMoveData?.fen || currentFen || DEFAULT_FEN;
         rows.push({
             type: 'result',
             key: 'result-row',

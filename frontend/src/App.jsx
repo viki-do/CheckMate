@@ -9,6 +9,7 @@ import HomePage from './pages/HomePage';
 import GameArchive from './pages/GameArchive';
 import GameDatabase from './pages/GameDatabase';
 import GameCollectionsPage from './pages/GameCollectionsPage';
+import SavedAnalysisPage from './pages/SavedAnalysisPage';
 import AnalyzeBoard from './components/AnalyzeBoard';
 import PlaySelectionPanel from './components/PlaySelectionPanel';
 import BotSelectionOrGame from './components/BotSelectionOrGame';
@@ -74,10 +75,32 @@ const App = () => {
                         >
                             <Route index element={<BotSelectionOrGame />} />
                         </Route>
+                        <Route
+                            path="/game/bots/:archiveGameId"
+                            element={isAuthenticated ? <GameBoard /> : <Navigate to="/login" />}
+                        >
+                            <Route index element={<BotSelectionOrGame />} />
+                        </Route>
 
                         <Route 
                             path="/analysis" 
                             element={isAuthenticated ? <AnalyzeBoard /> : <Navigate to="/login" />} 
+                        />
+                        <Route
+                            path="/analysis/games"
+                            element={isAuthenticated ? <AnalyzeBoard /> : <Navigate to="/login" />}
+                        />
+                        <Route
+                            path="/analysis/explorer"
+                            element={isAuthenticated ? <AnalyzeBoard /> : <Navigate to="/login" />}
+                        />
+                        <Route
+                            path="/analysis/saved"
+                            element={isAuthenticated ? <SavedAnalysisPage /> : <Navigate to="/login" />}
+                        />
+                        <Route
+                            path="/analysis/saved/:savedAnalysisId/analysis"
+                            element={isAuthenticated ? <AnalyzeBoard /> : <Navigate to="/login" />}
                         />
                         <Route 
                             path="/analysis/collections" 
@@ -87,9 +110,37 @@ const App = () => {
                             path="/analysis/collection/:collectionSlug/games"
                             element={isAuthenticated ? <GameCollectionsPage /> : <Navigate to="/login" />}
                         />
+                        <Route
+                            path="/analysis/collection/:collectionSlug/:collectionGameId/analysis"
+                            element={isAuthenticated ? <AnalyzeBoard /> : <Navigate to="/login" />}
+                        />
+                        <Route
+                            path="/analysis/collection/:collectionSlug/:collectionGameId/review"
+                            element={isAuthenticated ? <AnalyzeBoard /> : <Navigate to="/login" />}
+                        />
+                        <Route
+                            path="/analysis/collection/:collectionSlug/:collectionGameId/games"
+                            element={isAuthenticated ? <GameCollectionsPage /> : <Navigate to="/login" />}
+                        />
+                        <Route
+                            path="/analysis/collection/:collectionSlug/:collectionGameId/collection-settings"
+                            element={isAuthenticated ? <AnalyzeBoard /> : <Navigate to="/login" />}
+                        />
                         <Route 
                             path="/analysis/game/master/:gameId/review" 
                             element={isAuthenticated ? <AnalyzeBoard /> : <Navigate to="/login" />} 
+                        />
+                        <Route
+                            path="/analysis/game/pgn/:pgnGameId/review"
+                            element={isAuthenticated ? <AnalyzeBoard /> : <Navigate to="/login" />}
+                        />
+                        <Route
+                            path="/analysis/game/bots/:botSelfAnalysisGameId/analysis"
+                            element={isAuthenticated ? <AnalyzeBoard /> : <Navigate to="/login" />}
+                        />
+                        <Route
+                            path="/analysis/game/bots/:botReviewGameId/review"
+                            element={isAuthenticated ? <AnalyzeBoard /> : <Navigate to="/login" />}
                         />
                         
                         <Route 

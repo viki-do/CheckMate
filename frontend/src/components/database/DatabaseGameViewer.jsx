@@ -20,6 +20,7 @@ import { getReplayPositionSoundName } from '../../hooks/chess-game/soundUtils';
 import { MoveNotation } from '../move-list/MoveNotation';
 import { CapturedRow } from '../MaterialAdvantage';
 import { getCapturedPieces, getMaterialDiff } from '../materialUtils';
+import { getPlayerImage } from '../../utils/databaseFormatters';
 
 const DEFAULT_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 const COLLECTIONS_STORAGE_KEY = 'checkmate_game_collections';
@@ -102,22 +103,34 @@ const formatMoveRows = (history) => {
   return rows;
 };
 
-const PlayerStrip = ({ name, rating, type, material, side }) => (
-  <div className={`w-170 flex items-center justify-between px-1 h-12 ${type === 'top' ? 'mb-1' : 'mt-1'} shrink-0`}>
-    <div className="flex items-center gap-3">
-      <div className="w-9 h-9 bg-[#2b2a27] rounded-md flex items-center justify-center border border-chess-bg overflow-hidden">
-        <i className={`fas ${type === 'top' ? 'fa-user-tie' : 'fa-user'} text-[#808080] text-xl`}></i>
-      </div>
-      <div className="flex flex-col justify-center">
-        <span className="text-[#bab9b8] font-bold text-[14px] leading-none">{name}</span>
-        {rating && (
-          <span className="text-[#8b8987] text-[11px] font-bold">({rating})</span>
-        )}
-        <CapturedRow pieces={material.pieces} side={side} diff={material.diff} />
+const PlayerStrip = ({ name, rating, type, material, side, isWinner = false }) => {
+  const image = getPlayerImage(name);
+
+  return (
+    <div className={`w-170 flex items-center justify-between px-1 h-12 ${type === 'top' ? 'mb-1' : 'mt-1'} shrink-0`}>
+      <div className="flex items-center gap-3 min-w-0">
+        <div
+          className={`w-9 h-9 bg-[#2b2a27] rounded-md flex items-center justify-center overflow-hidden shrink-0 ${
+            isWinner ? 'border-2 border-[#81b64c]' : 'border border-chess-bg'
+          }`}
+        >
+          {image ? (
+            <img src={image} alt={name} className="w-full h-full object-cover object-top" />
+          ) : (
+            <i className={`fas ${type === 'top' ? 'fa-user-tie' : 'fa-user'} text-[#808080] text-xl`}></i>
+          )}
+        </div>
+        <div className="flex flex-col justify-center min-w-0">
+          <span className="text-[#bab9b8] font-bold text-[14px] leading-none truncate">{name}</span>
+          {rating && (
+            <span className="text-[#8b8987] text-[11px] font-bold">({rating})</span>
+          )}
+          <CapturedRow pieces={material.pieces} side={side} diff={material.diff} />
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 const isEcoCode = (value) => /^[A-E][0-9]{2}$/i.test(String(value || '').trim());
 
@@ -360,6 +373,8 @@ const DatabaseGameViewer = ({ game }) => {
     isFlipped: false,
     handleMouseUp: () => {},
   };
+  const whiteWon = game.result === '1-0';
+  const blackWon = game.result === '0-1';
 
   const goToAnalysis = () => {
     navigate(`/analysis/game/master/${game.id}/review`);
@@ -463,6 +478,7 @@ const DatabaseGameViewer = ({ game }) => {
           type="top"
           material={topMaterial}
           side="black"
+          isWinner={blackWon}
         />
 
         <div className="w-170 h-170 bg-[#2b2b2b] relative">
@@ -479,6 +495,7 @@ const DatabaseGameViewer = ({ game }) => {
           type="bottom"
           material={bottomMaterial}
           side="white"
+          isWinner={whiteWon}
         />
       </div>
 

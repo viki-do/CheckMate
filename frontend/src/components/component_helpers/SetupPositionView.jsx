@@ -28,6 +28,10 @@ const SetUpPositionView = ({
     viewIndex,   
     onViewMove,
     onReviewClick,
+    canSave = false,
+    canReview = false,
+    setupTurn = null,
+    onTurnChange,
     currentFen,
     onFenChange,
     onLoadConfirm,
@@ -49,6 +53,8 @@ const SetUpPositionView = ({
         if (fenParts.length < 4) return fen;
 
         fenParts[1] = nextTurn;
+        fenParts[4] = '0';
+        fenParts[5] = '1';
         return fenParts.join(' ');
     };
 
@@ -67,7 +73,7 @@ const SetUpPositionView = ({
         c.remove(square); // Előbb töröljük ami ott volt
         c.put({ type, color }, square);
         
-        const newFen = c.fen();
+        const newFen = updateFenTurn(c.fen(), turn);
         setLocalFen(newFen);
         onFenChange(newFen);
     } catch (e) {
@@ -97,15 +103,24 @@ const SetUpPositionView = ({
     };
 
     useEffect(() => {
-        setLocalFen(currentFen);
-        syncUIWithFen(currentFen);
-    }, [currentFen]);
+        const nextTurn = setupTurn || (() => {
+            try {
+                return new Chess(currentFen).turn();
+            } catch {
+                return 'w';
+            }
+        })();
+        const normalizedFen = updateFenTurn(currentFen, nextTurn);
+        setLocalFen(normalizedFen);
+        syncUIWithFen(normalizedFen);
+    }, [currentFen, setupTurn]);
 
     const handleInputChange = (e) => {
         const newFen = e.target.value;
         setLocalFen(newFen);
         try {
-            new Chess(newFen);
+            const parsed = new Chess(newFen);
+            onTurnChange?.(parsed.turn());
             syncUIWithFen(newFen); // Frissítjük a gombokat/választót
             onFenChange(newFen);
         } catch (err) {}
@@ -190,7 +205,7 @@ const SetUpPositionView = ({
                                 const newTurn = e.target.value === "White to move" ? 'w' : 'b';
                                 // Itt elméletileg módosítani kéne a FEN stringet is, ha a felhasználó kézzel vált
                                 setTurn(newTurn);
-                                setTurn(newTurn);
+                                onTurnChange?.(newTurn);
                                 const updatedFen = updateFenTurn(localFen, newTurn);
                                 setLocalFen(updatedFen);
                                 onFenChange(updatedFen);
@@ -251,16 +266,16 @@ const SetUpPositionView = ({
             {/* FIX FOOTER */}
             <div className="p-2 bg-[#21201d] rounded-b-lg border-t border-[#3c3a37] shrink-0 h-[124px] box-border">
                 <div className="flex justify-between gap-1 mb-3 px-1 h-12">
-                    <ControlBtn icon={<ResetArrow size={20} />} onClick={() => onViewMove?.(0)} />
-                    <ControlBtn icon={<ChevronLeft size={20} />} onClick={() => onViewMove?.(viewIndex === -1 ? history.length - 2 : viewIndex - 1)} />
-                    <ControlBtn icon={<ChevronRight size={20} />} onClick={() => onViewMove?.(viewIndex === -1 ? -1 : viewIndex + 1)} />
-                    <ControlBtn icon={<ArrowChevronEnd size={20} />} onClick={() => onViewMove?.(-1)} />
+                    <ControlBtn icon={<ResetArrow size={20} />} onClick={() => onViewMove?.(0)} disabled />
+                    <ControlBtn icon={<ChevronLeft size={20} />} onClick={() => onViewMove?.(viewIndex === -1 ? history.length - 2 : viewIndex - 1)} disabled />
+                    <ControlBtn icon={<ChevronRight size={20} />} onClick={() => onViewMove?.(viewIndex === -1 ? -1 : viewIndex + 1)} disabled />
+                    <ControlBtn icon={<ArrowChevronEnd size={20} />} onClick={() => onViewMove?.(-1)} disabled />
                 </div>
                 <div className="flex justify-center items-center text-[#8b8987] pb-1">
                      <div className='flex gap-7'>
                         <FooterAction icon={<New size={20} />} label="New" onClick={onBack} />
-                        <FooterAction icon={<Save size={20} />} label="Save" onClick={onSaveClick} />
-                        <FooterAction icon={<Review size={20} />} label="Review" onClick={onReviewClick} />
+                        <FooterAction icon={<Save size={20} />} label="Save" onClick={onSaveClick} disabled={!canSave} />
+                        <FooterAction icon={<Review size={20} />} label="Review" onClick={onReviewClick} disabled={!canReview} />
                         <FooterAction icon={<MoreHorizontal size={20} />} label="" />
                      </div>
                 </div>

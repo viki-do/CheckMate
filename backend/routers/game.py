@@ -1,7 +1,7 @@
 import uuid
 import chess
 import chess.engine
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request 
 from sqlalchemy.orm import Session
 import models
@@ -12,6 +12,7 @@ import json
 import os
 import asyncio
 import random
+from pathlib import Path
 from .analysis_engine import ChessCoachEngine
 
 router = APIRouter(tags=["Chess Game"])
@@ -20,7 +21,7 @@ coach = ChessCoachEngine()
 # Globális változó a motornak
 engine_singleton = None
 
-STOCKFISH_PATH = "engine/stockfish.exe"
+STOCKFISH_PATH = str(Path(__file__).resolve().parents[1] / "engine" / "stockfish.exe")
 OPENING_BOOK = {}
 
 def get_engine():
@@ -197,6 +198,7 @@ def analyze_full_game(game_id: str, user_id: str = Depends(get_current_user_id),
     black_accuracy = coach.calculate_accuracy(side_stats["black"]["losses"], side_stats["black"]["p_befores"]) if side_stats["black"]["losses"] else None
     game.white_accuracy = white_accuracy
     game.black_accuracy = black_accuracy
+    game.reviewed_at = datetime.now(timezone.utc)
     db.commit()
 
     return {
@@ -386,7 +388,7 @@ def analyze_sandbox_move(data: dict):
         
         # Mélyelemzés megkísérlése
         try:
-            deep_res = coach.analyze_position_deep(board, engine, multipv=3)
+            deep_res = coach.analyze_position_deep(board, engine, depth=10, nodes=60000, multipv=3)
         except Exception as e:
             print(f"Mélyelemzési hiba: {e}")
 
@@ -394,7 +396,7 @@ def analyze_sandbox_move(data: dict):
         # Ilyenkor ugyanazzal a mélységgel lefuttatunk egy közvetlen engine elemzést.
         if not deep_res.get("engine_lines"):
             try:
-                analysis = engine.analyse(board, coach.review_limit(), multipv=3)
+                analysis = engine.analyse(board, coach.review_limit(depth=10, nodes=60000), multipv=3)
                 engine_lines = []
 
                 for entry in analysis:
@@ -448,6 +450,28 @@ def analyze_sandbox_move(data: dict):
             pass
 
         played_eval = coach.evaluate_played_move_after(board, player_move, engine)
+        post_move_engine_lines = []
+        try:
+            post_move_res = coach.analyze_position_deep(temp_board, engine, depth=10, nodes=60000, multipv=3)
+            post_move_engine_lines = post_move_res.get("engine_lines", [])
+            if not post_move_engine_lines:
+                post_move_analysis = engine.analyse(temp_board, coach.review_limit(depth=10, nodes=60000), multipv=3)
+                for entry in post_move_analysis:
+                    pv_moves = entry.get("pv", [])
+                    if not pv_moves:
+                        continue
+
+                    score = entry["score"].white().score(mate_score=10000)
+                    post_move_engine_lines.append({
+                        "eval": score / 100.0 if abs(score) < 5000 else f"M{int((10000-abs(score))/100)}",
+                        "raw_eval": score,
+                        "continuation": temp_board.variation_san(pv_moves[:30]),
+                        "pv_uci": [move.uci() for move in pv_moves[:30]],
+                        "first_move_san": temp_board.san(pv_moves[0])
+                    })
+        except Exception as e:
+            print(f"Sandbox post-move elemzési hiba: {e}")
+
         label, move_eval = coach.classify_move(
             board, 
             player_move, 
@@ -476,7 +500,8 @@ def analyze_sandbox_move(data: dict):
             "eval_loss": eval_loss / 100.0 if eval_loss < 5000 else None,
             "win_chance_loss": round(win_chance_loss, 4),
             "opening": opening_data,
-            "engine_lines": deep_res.get("engine_lines", [])
+            "engine_lines": post_move_engine_lines,
+            "best_engine_lines": deep_res.get("engine_lines", [])
         }
 
     except Exception as e:
@@ -502,6 +527,10 @@ def analyze_full_game_sandbox(data: dict):
     board = chess.Board(initial_fen)
     coach = ChessCoachEngine()
     full_analysis = []
+    side_stats = {
+        "white": {"losses": [], "p_befores": []},
+        "black": {"losses": [], "p_befores": []},
+    }
     
     # Kezdő értékelés meghatározása (ha nem alapállás, érdemes ránézni)
     # Az alapértelmezett 30 (enyhe fehér előny) jó kiindulópont
@@ -551,6 +580,10 @@ def analyze_full_game_sandbox(data: dict):
         player_move_eval = move_eval if is_white_turn else -move_eval
         eval_loss = 0 if label == "book" else max(0, player_best_eval - player_move_eval)
         win_chance_loss = coach.get_review_loss(player_best_eval, player_move_eval, label)
+        p_before = coach.get_win_chance(prev_eval if is_white_turn else -prev_eval)
+        side_key = "white" if is_white_turn else "black"
+        side_stats[side_key]["losses"].append(win_chance_loss)
+        side_stats[side_key]["p_befores"].append(p_before)
         best_move = analysis[0]["pv"][0] if analysis[0].get("pv") else None
 
         full_analysis.append({
@@ -573,7 +606,14 @@ def analyze_full_game_sandbox(data: dict):
         board.push(player_move)
         prev_eval = move_eval
 
-    return {"analysis": full_analysis}
+    white_accuracy = coach.calculate_accuracy(side_stats["white"]["losses"], side_stats["white"]["p_befores"]) if side_stats["white"]["losses"] else None
+    black_accuracy = coach.calculate_accuracy(side_stats["black"]["losses"], side_stats["black"]["p_befores"]) if side_stats["black"]["losses"] else None
+
+    return {
+        "analysis": full_analysis,
+        "white_accuracy": white_accuracy,
+        "black_accuracy": black_accuracy,
+    }
 
 
 def rebuild_board(game_id: uuid.UUID, db: Session):
@@ -999,6 +1039,7 @@ def get_game_history(game_id: str, db: Session = Depends(get_db)):
                     "analysisLabel": m.accuracy_label,
                     "eval": m.evaluation,
                     "bestMove": m.best_move_uci,
+                    "winChanceLoss": m.win_chance_drop,
                 })
             except:
                 continue
@@ -1029,9 +1070,20 @@ def get_game_history(game_id: str, db: Session = Depends(get_db)):
             elif board.can_claim_fifty_moves(): reason = "Draw by 50-move rule"
             else: reason = "Draw by agreement"
 
+        move_count = len([m for m in history_data if m.get("m") != "start"])
+        result = "*"
+        if game.status == models.GameStatus.draw:
+            result = "1/2-1/2"
+        elif game.status not in {models.GameStatus.ongoing, models.GameStatus.aborted} and move_count > 0:
+            winner_is_white = board.turn == chess.BLACK
+            if game.status == models.GameStatus.resigned:
+                winner_is_white = str(game.player_color).lower() == "black"
+            result = "1-0" if winner_is_white else "0-1"
+
         return {
             "history": history_data,
             "status": status_value,
+            "result": result,
             "reason": reason,
             "opening": opening_data,
             "base_time_sec": game.base_time_sec,
@@ -1048,6 +1100,26 @@ def get_game_history(game_id: str, db: Session = Depends(get_db)):
         import traceback
         traceback.print_exc()
         return {"history": [], "status": "ongoing", "reason": "Error", "opening": None}
+
+@router.delete("/game/{game_id}")
+def delete_game(game_id: str, user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    try:
+        game_uuid = uuid.UUID(game_id)
+        user_uuid = uuid.UUID(user_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid game id")
+
+    game = db.query(models.Game).filter(models.Game.id == game_uuid).first()
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    if game.white_player_id != user_uuid and game.black_player_id != user_uuid:
+        raise HTTPException(status_code=403, detail="Not allowed to delete this game")
+
+    db.query(models.Move).filter(models.Move.game_id == game_uuid).delete(synchronize_session=False)
+    db.delete(game)
+    db.commit()
+    return {"deleted": True, "game_id": str(game_uuid)}
     
 @router.get("/get-active-game")
 def get_active_game(user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
@@ -1221,15 +1293,26 @@ def get_user_games(username: str, offset: int = 0, limit: int = 10, db: Session 
     user = db.query(models.User).filter(models.User.username == username).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-        
+
+    user_game_filter = (models.Game.white_player_id == user.id) | (models.Game.black_player_id == user.id)
+    completed_statuses = {
+        models.GameStatus.finished,
+        models.GameStatus.draw,
+        models.GameStatus.resigned,
+        models.GameStatus.checkmate,
+        models.GameStatus.aborted,
+    }
+
     games = db.query(models.Game)\
-        .filter((models.Game.white_player_id == user.id) | (models.Game.black_player_id == user.id))\
+        .filter(user_game_filter, models.Game.status.in_(completed_statuses))\
         .order_by(models.Game.created_at.desc())\
         .offset(offset)\
         .limit(limit)\
         .all()
     
-    total_count = db.query(models.Game).filter((models.Game.white_player_id == user.id) | (models.Game.black_player_id == user.id)).count()
+    total_count = db.query(models.Game)\
+        .filter(user_game_filter, models.Game.status.in_(completed_statuses))\
+        .count()
 
     def bot_display_name(game):
         bot_id = (game.bot_id or "engine").replace("_", " ").replace("-", " ").strip()
@@ -1313,4 +1396,24 @@ def get_user_games(username: str, offset: int = 0, limit: int = 10, db: Session 
         })
 
     return {"games": serialized_games, "total": total_count}
+
+@router.get("/user-activity-dates/{username}")
+def get_user_activity_dates(username: str, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.username == username).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    games = db.query(models.Game.created_at, models.Game.reviewed_at)\
+        .filter((models.Game.white_player_id == user.id) | (models.Game.black_player_id == user.id))\
+        .order_by(models.Game.created_at.desc())\
+        .all()
+
+    return {
+        "dates": [
+            value.isoformat()
+            for game in games
+            for value in (game.created_at, game.reviewed_at)
+            if value
+        ]
+    }
 

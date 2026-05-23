@@ -75,7 +75,7 @@ const Navbar = () => {
                     onMouseLeave={() => setIsPlayHovered(false)}
                 >
                     {isPlayHovered && (
-                        <div className="absolute left-0 top-0 w-[calc(100%+18.25rem)] h-48 z-[1990]" />
+                        <div className="absolute left-full top-0 w-2 h-48 z-[1990]" />
                     )}
                     <NavItem
                         to="/play"
@@ -198,7 +198,7 @@ const Navbar = () => {
                     onMouseLeave={() => setIsOtherHovered(false)}
                 >
                     {isOtherHovered && (
-                        <div className="absolute left-0 top-0 w-[calc(100%+18.25rem)] h-28 z-[1990]" />
+                        <div className="absolute left-full top-0 w-2 h-28 z-[1990]" />
                     )}
                     <button
                         className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-all relative group cursor-pointer ${

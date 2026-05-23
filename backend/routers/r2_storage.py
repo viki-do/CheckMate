@@ -120,3 +120,46 @@ def get_r2_prefix_stats(prefix="pgn-imports/lumbras/"):
         "object_count": object_count,
         "size_bytes": total_size_bytes,
     }
+
+
+def list_r2_objects(prefix):
+    client = get_r2_client()
+    bucket = get_r2_bucket_name()
+    continuation_token = None
+
+    while True:
+        params = {"Bucket": bucket, "Prefix": prefix}
+        if continuation_token:
+            params["ContinuationToken"] = continuation_token
+
+        response = client.list_objects_v2(**params)
+        for item in response.get("Contents", []):
+            key = item.get("Key", "")
+            if key and not key.endswith("/"):
+                yield key
+
+        if not response.get("IsTruncated"):
+            break
+        continuation_token = response.get("NextContinuationToken")
+        if not continuation_token:
+            break
+
+
+def delete_r2_objects(object_keys, batch_size=1000):
+    client = get_r2_client()
+    bucket = get_r2_bucket_name()
+    deleted = 0
+    batch = []
+
+    for object_key in object_keys:
+        batch.append({"Key": object_key})
+        if len(batch) >= batch_size:
+            response = client.delete_objects(Bucket=bucket, Delete={"Objects": batch})
+            deleted += len(response.get("Deleted", []))
+            batch.clear()
+
+    if batch:
+        response = client.delete_objects(Bucket=bucket, Delete={"Objects": batch})
+        deleted += len(response.get("Deleted", []))
+
+    return deleted

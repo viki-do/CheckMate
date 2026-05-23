@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, ChevronDown, Compass, Download, MoreHorizontal, Plus, Search, Settings } from "lucide-react";
+import { Chess } from "chess.js";
+import { ArrowLeft, ChevronDown, ChevronUp, Compass, Download, MoreHorizontal, PencilLine, Plus, Search, Settings, Trash2 } from "lucide-react";
 import { ArrowChevronEnd, BoardPlus, ChevronLeft, ChevronRight, DocumentFolderBoard, GameCollections, LayoutListCheck, LoadFromFEN, Magnifier, New, ResetArrow, Review, Save, Share } from "../components/icons/Icons";
 import ChessBoardGrid from "../components/ChessBoardGrid";
 import AnalyzeEvalBar from "../components/analyze-board/AnalyzeEvalBar";
 import AnalyzePlayerInfo from "../components/analyze-board/AnalyzePlayerInfo";
 import { DEFAULT_FEN } from "../components/analyze-board/analyzeBoardUtils";
+import NewAnalysisModal from "../components/analyze-board/NewAnalysisModal";
 import { ControlBtn, FooterAction } from "../components/component_helpers/AnalysisHelpers";
+import { MoveNotation } from "../components/move-list/MoveNotation";
 
 const STORAGE_KEY = "checkmate_game_collections";
 const PUBLIC_ID_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -38,6 +41,91 @@ const normalizeCollection = (collection) => ({
     ...collection,
     publicId: collection.publicId || createPublicId(),
 });
+
+const readCollections = () => {
+    try {
+        return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]").map(normalizeCollection);
+    } catch {
+        return [];
+    }
+};
+
+const parseMoveText = (moveText) => {
+    const chess = new Chess();
+    const cleanText = String(moveText || "")
+        .replace(/\{[^}]*\}/g, " ")
+        .replace(/\([^)]*\)/g, " ")
+        .replace(/\$\d+/g, " ")
+        .replace(/\d+\.(\.\.)?/g, " ")
+        .replace(/\b(1-0|0-1|1\/2-1\/2|\*)\b/g, " ");
+
+    const tokens = cleanText
+        .split(/\s+/)
+        .map((token) => token.trim().replace(/[!?]+$/g, ""))
+        .filter(Boolean);
+
+    for (const token of tokens) {
+        chess.move(token);
+    }
+
+    return chess.history({ verbose: true });
+};
+
+const getMoveRows = (game) => {
+    const pgn = `${game.moves || ""} ${game.result || "*"}`.trim();
+    let moves = [];
+
+    try {
+        const chess = new Chess();
+        chess.loadPgn(pgn);
+        moves = chess.history({ verbose: true });
+    } catch {
+        try {
+            moves = parseMoveText(game.moves);
+        } catch {
+            moves = [];
+        }
+    }
+
+    const rows = [];
+    for (let index = 0; index < moves.length; index += 2) {
+        rows.push({
+            moveNumber: Math.floor(index / 2) + 1,
+            white: moves[index] ? { ...moves[index], m: moves[index].san } : null,
+            black: moves[index + 1] ? { ...moves[index + 1], m: moves[index + 1].san } : null,
+        });
+    }
+    return rows;
+};
+
+const getMoveNotationClassName = (move) => (
+    `truncate flex items-center min-w-0 ${move?.m && !/^[NBRQK]/.test(move.m) ? "pl-1" : ""}`
+);
+
+const formatPlayer = (name, rating) => (
+    [name || "Unknown", rating ? `(${rating})` : ""].filter(Boolean).join(" ")
+);
+
+const getOpeningLine = (game) => {
+    const eco = String(game.eco || "").trim();
+    const opening = String(game.opening || "").trim();
+    if (eco && opening) return `${eco} (${opening})`;
+    return opening || eco || "Unknown opening";
+};
+
+const getGameYear = (game) => {
+    const date = String(game.date || "").trim();
+    const match = date.match(/\d{4}/);
+    return match ? match[0] : "";
+};
+
+const sortGamesByAddedAt = (games) => (
+    [...games].sort((a, b) => {
+        const bTime = Date.parse(b.addedAt || b.createdAt || "") || 0;
+        const aTime = Date.parse(a.addedAt || a.createdAt || "") || 0;
+        return bTime - aTime;
+    })
+);
 
 const StaticBoard = () => {
     const staticGameLogic = {
@@ -96,7 +184,7 @@ const CollectionCard = ({ collection, onSelect }) => (
     </button>
 );
 
-const CollectionsFooter = ({ onNewCollection }) => (
+const CollectionsFooter = ({ onNewClick }) => (
     <div className="border-t border-[#343330] px-3 py-3 shrink-0 bg-[#1f1e1b]">
         <div className="flex justify-between gap-1 mb-3 px-1 h-12">
             <ControlBtn icon={<ResetArrow size={20} />} onClick={noop} />
@@ -106,7 +194,7 @@ const CollectionsFooter = ({ onNewCollection }) => (
         </div>
         <div className="flex justify-center items-center text-[#8b8987] pb-1">
             <div className="flex gap-7 text-xs">
-                <FooterAction icon={<New size={20} />} label="New" onClick={onNewCollection} />
+                <FooterAction icon={<New size={20} />} label="New" onClick={onNewClick} />
                 <FooterAction icon={<Save size={20} />} label="Save" onClick={noop} />
                 <FooterAction icon={<Review size={20} />} label="Review" onClick={noop} />
                 <FooterAction icon={<Download size={20} />} label="CSV" onClick={noop} />
@@ -260,7 +348,190 @@ const NewCollectionModal = ({ isOpen, onClose, onCreate }) => {
     );
 };
 
-const CollectionDetailPanel = ({ collection, onBack, onNewCollection, onAddGames }) => (
+const DeleteGameModal = ({ isOpen, onClose, onConfirm }) => {
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+            <div className="relative w-[360px] rounded-xl bg-[#24231f] border border-[#45433f] shadow-2xl px-8 pt-8 pb-6">
+                <button
+                    type="button"
+                    onClick={onClose}
+                    className="absolute right-3.5 top-2.5 text-[#9f9e9b] hover:text-white text-[32px] leading-none font-semibold"
+                    aria-label="Close delete game dialog"
+                >
+                    &times;
+                </button>
+
+                <h2 className="text-center text-white text-[24px] leading-7 font-bold mb-3">
+                    Delete Game?
+                </h2>
+                <p className="text-center text-[#a7a5a2] text-[16px] leading-5 font-bold mb-6">
+                    Do you want to remove this game<br />
+                    from this collection?
+                </p>
+
+                <div className="grid grid-cols-2 gap-3">
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="h-[50px] rounded-xl bg-gradient-to-b from-[#3f3d3a] to-[#302f2c] border border-[#4a4845] text-[#eeeeec] text-[19px] font-bold shadow-lg hover:from-[#4a4845] hover:to-[#383633]"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        type="button"
+                        onClick={onConfirm}
+                        className="h-[50px] rounded-xl bg-gradient-to-b from-[#ff463c] to-[#ed2424] border border-[#ff5a51] text-white text-[19px] font-bold shadow-lg hover:from-[#ff5b52] hover:to-[#ff302f]"
+                    >
+                        Delete
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const CollectionGameRow = ({ game, isOpen, onToggle, onRemove, onReview }) => {
+    const moveRows = useMemo(() => getMoveRows(game), [game]);
+    const year = getGameYear(game);
+    const summaryLine = [game.result, game.event || game.site].filter(Boolean).join(" ");
+
+    return (
+        <div className={`border-b border-[#343330] transition-colors ${isOpen ? "bg-[#302f2c]" : "bg-[#24231f] hover:bg-[#2a2926]"}`}>
+            <button
+                type="button"
+                onClick={onToggle}
+                className={`w-full px-4 grid grid-cols-[minmax(0,1fr)_70px_58px] gap-2 text-left items-center ${isOpen ? "min-h-24 py-3" : "h-16"}`}
+            >
+                <div className="min-w-0">
+                    <div className="text-[#d7d6d4] text-[13px] font-bold truncate leading-4">{formatPlayer(game.white, game.white_elo)}</div>
+                    <div className="mt-1 text-[#d7d6d4] text-[13px] font-bold truncate leading-4">{formatPlayer(game.black, game.black_elo)}</div>
+                </div>
+                <div className="text-right text-[#d7d6d4] text-[13px] font-bold leading-4 whitespace-nowrap">{game.result || "*"}</div>
+                <div className="flex items-center justify-end gap-2 text-[#9f9e9b] text-[13px] font-bold">
+                    <span>{year}</span>
+                    <span
+                        role="button"
+                        tabIndex={0}
+                        onClick={(event) => {
+                            event.stopPropagation();
+                            onToggle();
+                        }}
+                        onKeyDown={(event) => {
+                            if (event.key !== "Enter" && event.key !== " ") return;
+                            event.preventDefault();
+                            event.stopPropagation();
+                            onToggle();
+                        }}
+                        className="h-8 w-8 -mr-2 flex items-center justify-center hover:text-white"
+                        title={isOpen ? "Collapse game" : "Expand game"}
+                    >
+                        {isOpen ? <ChevronUp size={19} strokeWidth={3} /> : <ChevronDown size={19} strokeWidth={3} />}
+                    </span>
+                </div>
+            </button>
+
+            {isOpen && (
+                <div className="px-4 pb-3">
+                    <div className="text-[#d7d6d4] text-[14px] font-semibold leading-6">
+                        {summaryLine && <div>{summaryLine}</div>}
+                        {game.date && <div>{game.date}</div>}
+                        <div>{getOpeningLine(game)}</div>
+                    </div>
+
+                    <div className="mt-3 max-h-[168px] overflow-y-auto collection-scrollbar pr-1 rounded-sm bg-[#2f2e2b]">
+                        {moveRows.length ? (
+                            moveRows.slice(0, 24).map((row) => (
+                                <div
+                                    key={row.moveNumber}
+                                    className="grid grid-cols-[54px_1fr_1fr] h-8 px-3 items-center odd:bg-[#34332f] text-[#c9c8c5] text-[14px] font-bold"
+                                >
+                                    <div className="text-[#9f9e9b]">{row.moveNumber}.</div>
+                                    <div className={getMoveNotationClassName(row.white)}>
+                                        {row.white ? <MoveNotation move={row.white} isBlack={false} /> : ""}
+                                    </div>
+                                    <div className={getMoveNotationClassName(row.black)}>
+                                        {row.black ? <MoveNotation move={row.black} isBlack /> : ""}
+                                    </div>
+                                </div>
+                            ))
+                        ) : (
+                            <div className="h-20 flex items-center justify-center text-[#8f8e8b] text-[13px] font-semibold">
+                                No move list available
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="mt-3 h-10 flex items-center justify-between text-[#9f9e9b]">
+                        <div className="flex items-center gap-4">
+                            <button
+                                type="button"
+                                onClick={(event) => {
+                                    event.stopPropagation();
+                                    onRemove(game.id);
+                                }}
+                                title="Remove from collection"
+                                className="hover:text-white"
+                            >
+                                <Trash2 size={23} strokeWidth={2.6} />
+                            </button>
+                            <button type="button" title="Edit note" className="hover:text-white">
+                                <PencilLine size={23} strokeWidth={2.6} />
+                            </button>
+                        </div>
+                        <div className="flex items-center gap-5">
+                            <button
+                                type="button"
+                                title="New analysis"
+                                onClick={(event) => {
+                                    event.stopPropagation();
+                                    onReview(game.id);
+                                }}
+                                className="hover:text-white"
+                            >
+                                <New size={24} />
+                            </button>
+                            <button type="button" title="Download" className="hover:text-white">
+                                <Download size={22} strokeWidth={3} />
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+const CollectionDetailPanel = ({ collection, initialOpenGameId, onBack, onNewAnalysis, onAddGames, onRemoveGame, onOpenGame, onAnalysisTab, onReviewGame, onSettings }) => {
+    const games = useMemo(() => sortGamesByAddedAt(Array.isArray(collection.games) ? collection.games : []), [collection.games]);
+    const [openGameId, setOpenGameId] = useState(undefined);
+
+    useEffect(() => {
+        setOpenGameId(undefined);
+    }, [collection.id]);
+
+    useEffect(() => {
+        if (!games.length) {
+            setOpenGameId(null);
+            return;
+        }
+        if (openGameId === undefined) {
+            const initialGame = initialOpenGameId && games.find((game) => String(game.id) === String(initialOpenGameId));
+            const nextOpenGameId = String(initialGame?.id || games[0].id);
+            setOpenGameId(nextOpenGameId);
+            onOpenGame(nextOpenGameId);
+            return;
+        }
+        if (openGameId === null) return;
+
+        const currentExists = games.some((game) => String(game.id) === String(openGameId));
+        if (!currentExists) {
+            setOpenGameId(games.length ? String(games[0].id) : null);
+        }
+    }, [collection.id, games, openGameId, initialOpenGameId]);
+
+    return (
     <div className="w-[480px] h-[744px] bg-[#24231f] rounded-md shadow-2xl border border-[#252420] flex flex-col overflow-hidden shrink-0">
         <div className="h-15 relative flex items-center px-5 border-b border-[#3a3936] shrink-0">
             <button onClick={onBack} className="absolute left-4 text-[#a8a7a5] hover:text-white">
@@ -275,21 +546,25 @@ const CollectionDetailPanel = ({ collection, onBack, onNewCollection, onAddGames
                 />
                 <h1 className="truncate text-white text-[22px] font-semibold">{collection.name}</h1>
             </div>
-            <button className="absolute right-4 text-[#a8a7a5] hover:text-white">
+            <button type="button" onClick={() => onSettings(openGameId || games[0]?.id)} className="absolute right-4 text-[#a8a7a5] hover:text-white">
                 <Settings size={27} strokeWidth={3} />
             </button>
         </div>
 
         <div className="grid grid-cols-3 h-16 border-b border-[#343330] shrink-0">
-            <button className="flex flex-col items-center justify-center gap-1.5 bg-[#1f1e1b] text-[#bab9b8]">
-                <Search size={20} strokeWidth={3} />
+            <button
+                type="button"
+                onClick={() => onAnalysisTab(openGameId || games[0]?.id)}
+                className="flex flex-col items-center justify-center gap-1.5 bg-[#1f1e1b] text-[#bab9b8] hover:text-white"
+            >
+                <New size={20} />
                 <span className="text-[12px] font-semibold">Analysis</span>
             </button>
-            <button className="flex flex-col items-center justify-center gap-1.5 text-white">
+            <button type="button" className="flex flex-col items-center justify-center gap-1.5 text-white">
                 <DocumentFolderBoard size={22} />
                 <span className="text-[12px] font-semibold">Games</span>
             </button>
-            <button className="flex flex-col items-center justify-center gap-1.5 bg-[#1f1e1b] text-[#bab9b8]">
+            <button type="button" className="flex flex-col items-center justify-center gap-1.5 bg-[#1f1e1b] text-[#bab9b8]">
                 <Compass size={20} strokeWidth={2.7} />
                 <span className="text-[12px] font-semibold">Explore</span>
             </button>
@@ -307,17 +582,27 @@ const CollectionDetailPanel = ({ collection, onBack, onNewCollection, onAddGames
             </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto">
-            {Array.isArray(collection.games) && collection.games.length > 0 ? (
-                collection.games.map((game) => (
-                    <div key={game.id} className="px-4 py-3 border-b border-[#343330] hover:bg-[#2a2926] transition-colors">
-                        <div className="text-[#e2e1df] text-[14px] font-semibold truncate">
-                            {game.white} vs {game.black}
-                        </div>
-                        <div className="mt-1 text-[#9f9e9b] text-[12px] font-semibold truncate">
-                            {[game.result, game.date, game.eco || game.opening].filter(Boolean).join(" - ")}
-                        </div>
-                    </div>
+        <div className="h-12 px-4 flex items-center justify-end border-b border-[#343330] shrink-0">
+            <button type="button" className="flex items-center gap-2 text-[#bab9b8] hover:text-white text-[14px] font-bold">
+                Recently Added <ChevronDown size={17} strokeWidth={3} />
+            </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto collection-scrollbar">
+            {games.length > 0 ? (
+                games.map((game) => (
+                    <CollectionGameRow
+                        key={game.id}
+                        game={game}
+                        isOpen={String(openGameId) === String(game.id)}
+                        onToggle={() => setOpenGameId((current) => {
+                            const nextOpenGameId = String(current) === String(game.id) ? null : String(game.id);
+                            if (nextOpenGameId) onOpenGame(nextOpenGameId);
+                            return nextOpenGameId;
+                        })}
+                        onRemove={(gameId) => onRemoveGame(collection.id, gameId)}
+                        onReview={onReviewGame}
+                    />
                 ))
             ) : (
                 <div className="h-full flex flex-col items-center justify-center text-center px-8">
@@ -333,11 +618,12 @@ const CollectionDetailPanel = ({ collection, onBack, onNewCollection, onAddGames
             )}
         </div>
 
-        <CollectionsFooter onNewCollection={onNewCollection} />
+        <CollectionsFooter onNewClick={onNewAnalysis} />
     </div>
-);
+    );
+};
 
-const GameCollectionsPanel = ({ collections, searchTerm, onSearchChange, onNewCollection, onSelectCollection }) => {
+const GameCollectionsPanel = ({ collections, searchTerm, onSearchChange, onNewCollection, onFooterNew, onSelectCollection }) => {
     const filteredCollections = useMemo(() => {
         const term = searchTerm.trim().toLowerCase();
         if (!term) return collections;
@@ -410,27 +696,35 @@ const GameCollectionsPanel = ({ collections, searchTerm, onSearchChange, onNewCo
             )}
         </div>
 
-        <CollectionsFooter onNewCollection={onNewCollection} />
+        <CollectionsFooter onNewClick={onFooterNew} />
     </div>
     );
 };
 
 const GameCollectionsPage = () => {
     const navigate = useNavigate();
-    const { collectionSlug } = useParams();
+    const { collectionSlug, collectionGameId } = useParams();
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isNewAnalysisModalOpen, setIsNewAnalysisModalOpen] = useState(false);
+    const [pendingDeleteGame, setPendingDeleteGame] = useState(null);
     const [searchTerm, setSearchTerm] = useState("");
-    const [collections, setCollections] = useState(() => {
-        try {
-            return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]").map(normalizeCollection);
-        } catch {
-            return [];
-        }
-    });
+    const [collections, setCollections] = useState(readCollections);
 
     useEffect(() => {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(collections));
     }, [collections]);
+
+    useEffect(() => {
+        const refreshCollections = () => setCollections(readCollections());
+        window.addEventListener("storage", refreshCollections);
+        window.addEventListener("focus", refreshCollections);
+        window.addEventListener("checkmate:collections-updated", refreshCollections);
+        return () => {
+            window.removeEventListener("storage", refreshCollections);
+            window.removeEventListener("focus", refreshCollections);
+            window.removeEventListener("checkmate:collections-updated", refreshCollections);
+        };
+    }, []);
 
     const handleCreateCollection = (collection) => {
         setCollections((prev) => [collection, ...prev]);
@@ -448,6 +742,32 @@ const GameCollectionsPage = () => {
         navigate(`/analysis/collection/${getCollectionSlug(collection)}/games`);
     };
 
+    const handleRemoveGameFromCollection = (collectionId, gameId) => {
+        setCollections((prev) => prev.map((collection) => {
+            if (collection.id !== collectionId) return collection;
+
+            const nextGames = (Array.isArray(collection.games) ? collection.games : [])
+                .filter((game) => String(game.id) !== String(gameId));
+
+            return {
+                ...collection,
+                games: nextGames,
+                gameCount: nextGames.length,
+                updatedAt: new Date().toISOString(),
+            };
+        }));
+    };
+
+    const requestRemoveGameFromCollection = (collectionId, gameId) => {
+        setPendingDeleteGame({ collectionId, gameId });
+    };
+
+    const confirmRemoveGameFromCollection = () => {
+        if (!pendingDeleteGame) return;
+        handleRemoveGameFromCollection(pendingDeleteGame.collectionId, pendingDeleteGame.gameId);
+        setPendingDeleteGame(null);
+    };
+
     return (
         <div className="flex h-screen w-full bg-[#302f2c] text-[#bab9b8] px-6 py-4 gap-6 overflow-hidden select-none font-sans items-center">
             <AnalyzeEvalBar whiteBarHeight={51} currentEvalValue={0.4} />
@@ -455,9 +775,21 @@ const GameCollectionsPage = () => {
             {selectedCollection ? (
                 <CollectionDetailPanel
                     collection={selectedCollection}
+                    initialOpenGameId={collectionGameId ? decodeURIComponent(collectionGameId) : null}
                     onBack={() => navigate("/analysis/collections")}
-                    onNewCollection={() => setIsModalOpen(true)}
-                    onAddGames={() => navigate("/analysis")}
+                    onNewAnalysis={() => setIsNewAnalysisModalOpen(true)}
+                    onAddGames={() => navigate(`/analysis?addGamesToCollection=${encodeURIComponent(getCollectionSlug(selectedCollection))}`)}
+                    onRemoveGame={requestRemoveGameFromCollection}
+                    onOpenGame={(gameId) => navigate(`/analysis/collection/${getCollectionSlug(selectedCollection)}/${encodeURIComponent(gameId)}/games`, { replace: true })}
+                    onAnalysisTab={(gameId) => {
+                        if (!gameId) return;
+                        navigate(`/analysis/collection/${getCollectionSlug(selectedCollection)}/${encodeURIComponent(gameId)}/analysis`);
+                    }}
+                    onReviewGame={(gameId) => navigate(`/analysis/collection/${getCollectionSlug(selectedCollection)}/${encodeURIComponent(gameId)}/analysis`)}
+                    onSettings={(gameId) => {
+                        if (!gameId) return;
+                        navigate(`/analysis/collection/${getCollectionSlug(selectedCollection)}/${encodeURIComponent(gameId)}/collection-settings`);
+                    }}
                 />
             ) : (
                 <GameCollectionsPanel
@@ -465,6 +797,9 @@ const GameCollectionsPage = () => {
                     searchTerm={searchTerm}
                     onSearchChange={setSearchTerm}
                     onNewCollection={() => setIsModalOpen(true)}
+                    onFooterNew={() => (
+                        collections.length > 0 ? navigate("/analysis") : setIsModalOpen(true)
+                    )}
                     onSelectCollection={handleSelectCollection}
                 />
             )}
@@ -472,6 +807,19 @@ const GameCollectionsPage = () => {
                 isOpen={isModalOpen}
                 onClose={() => setIsModalOpen(false)}
                 onCreate={handleCreateCollection}
+            />
+            <NewAnalysisModal
+                isOpen={isNewAnalysisModalOpen}
+                onClose={() => setIsNewAnalysisModalOpen(false)}
+                onConfirm={() => {
+                    setIsNewAnalysisModalOpen(false);
+                    navigate("/analysis");
+                }}
+            />
+            <DeleteGameModal
+                isOpen={Boolean(pendingDeleteGame)}
+                onClose={() => setPendingDeleteGame(null)}
+                onConfirm={confirmRemoveGameFromCollection}
             />
         </div>
     );

@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from passlib.context import CryptContext
 from pydantic import BaseModel
 from authlib.integrations.starlette_client import OAuth
+from urllib.parse import urlencode
 import models
 from database import SessionLocal
 
@@ -47,6 +48,15 @@ oauth.register(
     authorize_url='https://github.com/login/oauth/authorize',
     api_base_url='https://api.github.com/',
     client_kwargs={'scope': 'user:email'},
+)
+oauth.register(
+    name='facebook',
+    client_id=os.getenv("FACEBOOK_CLIENT_ID"),
+    client_secret=os.getenv("FACEBOOK_CLIENT_SECRET"),
+    access_token_url='https://graph.facebook.com/v19.0/oauth/access_token',
+    authorize_url='https://www.facebook.com/v19.0/dialog/oauth',
+    api_base_url='https://graph.facebook.com/v19.0/',
+    client_kwargs={'scope': 'email public_profile'},
 )
 
 # Segédfüggvények
@@ -106,6 +116,14 @@ def is_valid_username(value: str):
         not bool(re.search(r"[-_](?![A-Za-z0-9])", username))
     )
 
+def password_meets_requirements(value: str):
+    password = value or ""
+    return len(password) >= 8 and bool(re.search(r"[A-Z]", password)) and bool(re.search(r"[0-9]", password))
+
+
+PASSWORD_REQUIREMENTS_MESSAGE = "Password must be at least 8 characters and include one capital letter and one number"
+
+
 def profile_payload(user: models.User):
     return {
         "username": user.username,
@@ -128,10 +146,57 @@ def delete_avatar_file(avatar_url: str | None):
     if path.startswith(avatars_root) and os.path.exists(path):
         os.remove(path)
 
+def frontend_login_redirect(token: str, user: models.User):
+    query = urlencode({
+        "token": token,
+        "username": user.username,
+        "user_id": str(user.id),
+    })
+    return RedirectResponse(url=f"http://localhost:5173/login?{query}")
+
+def frontend_auth_error(provider: str):
+    return RedirectResponse(url=f"http://localhost:5173/login?error={provider}_auth_failed")
+
+def clean_oauth_username(value: str):
+    username = re.sub(r"[^A-Za-z0-9_-]+", "", value or "").strip("_-")
+    if not username or not re.search(r"[A-Za-z]", username):
+        username = "player"
+    return username[:25]
+
+def unique_oauth_username(db: Session, preferred: str):
+    base = clean_oauth_username(preferred)
+    candidate = base
+    suffix = 1
+    while db.query(models.User).filter(func.lower(models.User.username) == candidate.lower()).first():
+        suffix += 1
+        candidate = f"{base[: max(1, 25 - len(str(suffix)) - 1)]}-{suffix}"
+    return candidate
+
+def get_or_create_oauth_user(db: Session, email: str, username_seed: str, provider: str):
+    if not email:
+        raise ValueError("OAuth provider did not return an email address")
+
+    user = db.query(models.User).filter(models.User.email == email).first()
+    if user:
+        return user
+
+    user = models.User(
+        id=uuid.uuid4(),
+        username=unique_oauth_username(db, username_seed or email.split("@")[0]),
+        email=email,
+        provider=provider,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
 # --- ÚTVONALAK ---
 
 @router.post("/register")
 def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
+    if not password_meets_requirements(user_data.password):
+        raise HTTPException(status_code=400, detail=PASSWORD_REQUIREMENTS_MESSAGE)
     existing_user = db.query(models.User).filter((models.User.username == user_data.username) | (models.User.email == user_data.email)).first()
     if existing_user: raise HTTPException(status_code=400, detail="Már létezik ilyen felhasználó!")
     hashed_pwd = pwd_context.hash(user_data.password)
@@ -160,15 +225,11 @@ async def auth_google(request: Request, db: Session = Depends(get_db)):
         token = await oauth.google.authorize_access_token(request)
         user_info = token.get('userinfo') or (await oauth.google.get('https://openidconnect.googleapis.com/v1/userinfo', token=token)).json()
         email = user_info.get('email')
-        user = db.query(models.User).filter(models.User.email == email).first()
-        if not user:
-            user = models.User(id=uuid.uuid4(), username=email.split('@')[0], email=email, provider="google")
-            db.add(user)
-            db.commit()
-            db.refresh(user)
+        user = get_or_create_oauth_user(db, email, user_info.get("name") or email.split("@")[0], "google")
         jwt_token = create_access_token(data={"user_id": str(user.id), "username": user.username})
-        return RedirectResponse(url=f"http://localhost:5173/login?token={jwt_token}&username={user.username}&user_id={user.id}")
-    except Exception: return RedirectResponse(url="http://localhost:5173/login?error=google_auth_failed")
+        return frontend_login_redirect(jwt_token, user)
+    except Exception:
+        return frontend_auth_error("google")
 
 @router.get("/auth/github")
 async def login_github(request: Request):
@@ -180,15 +241,27 @@ async def auth_github(request: Request, db: Session = Depends(get_db)):
         token = await oauth.github.authorize_access_token(request)
         user_info = (await oauth.github.get('user', token=token)).json()
         email = user_info.get('email') or next(e['email'] for e in (await oauth.github.get('user/emails', token=token)).json() if e['primary'])
-        user = db.query(models.User).filter(models.User.email == email).first()
-        if not user:
-            user = models.User(id=uuid.uuid4(), username=user_info.get('login'), email=email, provider="github")
-            db.add(user)
-            db.commit()
-            db.refresh(user)
+        user = get_or_create_oauth_user(db, email, user_info.get('login'), "github")
         jwt_token = create_access_token(data={"user_id": str(user.id), "username": user.username})
-        return RedirectResponse(url=f"http://localhost:5173/login?token={jwt_token}&username={user.username}&user_id={user.id}")
-    except Exception: return RedirectResponse(url="http://localhost:5173/login?error=github_auth_failed")
+        return frontend_login_redirect(jwt_token, user)
+    except Exception:
+        return frontend_auth_error("github")
+
+@router.get("/auth/facebook")
+async def login_facebook(request: Request):
+    return await oauth.facebook.authorize_redirect(request, "http://localhost:8000/auth/facebook/callback")
+
+@router.get("/auth/facebook/callback")
+async def auth_facebook(request: Request, db: Session = Depends(get_db)):
+    try:
+        token = await oauth.facebook.authorize_access_token(request)
+        user_info = (await oauth.facebook.get("me?fields=id,name,email", token=token)).json()
+        email = user_info.get("email") or f"facebook-{user_info.get('id')}@facebook.local"
+        user = get_or_create_oauth_user(db, email, user_info.get("name"), "facebook")
+        jwt_token = create_access_token(data={"user_id": str(user.id), "username": user.username})
+        return frontend_login_redirect(jwt_token, user)
+    except Exception:
+        return frontend_auth_error("facebook")
 
 @router.get("/profile")
 def get_profile(user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
@@ -326,11 +399,8 @@ def change_password(data: PasswordChangeRequest, user_id: str = Depends(get_curr
         raise HTTPException(status_code=401, detail="Incorrect current password")
 
     next_password = data.new_password or ""
-    if len(next_password) < 8 or not re.search(r"[A-Z]", next_password) or not re.search(r"[0-9]", next_password):
-        raise HTTPException(
-            status_code=400,
-            detail="Password must be at least 8 characters and include one capital letter and one number",
-        )
+    if not password_meets_requirements(next_password):
+        raise HTTPException(status_code=400, detail=PASSWORD_REQUIREMENTS_MESSAGE)
     if next_password == data.current_password:
         raise HTTPException(status_code=400, detail="New password must be different")
 

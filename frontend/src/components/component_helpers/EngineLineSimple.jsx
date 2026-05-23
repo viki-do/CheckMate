@@ -1,55 +1,71 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 
-const EngineLineSimple = ({ eval: ev, moves = "", onMouseEnter, onMouseLeave, onMouseMove }) => {
+const formatEval = (value) => {
+    const numericValue = Number(value);
+    if (!Number.isFinite(numericValue)) return value;
+    return numericValue > 0 ? `+${numericValue.toFixed(2)}` : numericValue.toFixed(2);
+};
+
+const EngineLineSimple = ({ eval: ev, tokens = [], pvUci = [], onMoveEnter, onMoveLeave, onMouseMove }) => {
     const [isExpanded, setIsExpanded] = useState(false);
+    const hasOverflow = tokens.length > 9;
 
-    // Biztonsági ellenőrzés: ha moves null vagy undefined, legyen üres tömb
-    const moveArray = moves ? String(moves).split(/\s+/) : []; 
-    
-    // Ha sötét kezd (1...), akkor az első "lépés" a prefix lesz, 
-    // így érdemes lehet 9 elemet mutatni, hogy 8 valódi lépés látsszon.
-    const limit = moveArray[0] === "1..." ? 9 : 8;
-    
-    const shortMoves = moveArray.slice(0, limit).join(' ');
-    const remainingMoves = moveArray.slice(limit).join(' ');
-
-    if (moveArray.length === 0) return null;
+    if (tokens.length === 0) return null;
 
     return (
-        <div 
-            className="flex flex-col border-b border-white/5 last:border-0" 
-            onMouseEnter={onMouseEnter} 
-            onMouseMove={onMouseMove} 
-            onMouseLeave={onMouseLeave}
+        <div
+            className="flex flex-col border-b border-[#34322f] last:border-0"
+            onMouseMove={onMouseMove}
+            onMouseLeave={onMoveLeave}
         >
-            <div 
-                className="flex items-center gap-2 p-1.5 hover:bg-[#ffffff08] cursor-pointer group transition-colors"
-                onClick={() => remainingMoves && setIsExpanded(!isExpanded)}
-            >
-                <div className="w-12 text-center text-[10px] font-bold text-[#bab9b8] shrink-0 py-0.5 bg-[#1a1917] rounded border border-white/5">
-                    {typeof ev === 'number' ? (ev > 0 ? `+${ev.toFixed(2)}` : ev.toFixed(2)) : ev}
+            <div className={`flex items-start gap-2 px-3 ${isExpanded ? 'py-1.5' : 'h-[29px] items-center'}`}>
+                <div className="w-[52px] h-[19px] flex items-center justify-center rounded-[3px] bg-white text-black text-[12px] font-black shrink-0 shadow-sm">
+                    {formatEval(ev)}
                 </div>
-                <div className="text-[11px] text-[#bab9b8] flex-1 font-medium leading-none tracking-tight">
-                    <span className={moveArray[0] === "1..." ? "text-[#8b8987] font-mono mr-1" : ""}>
-                        {shortMoves}
-                    </span>
-                    {!isExpanded && remainingMoves && <span className="text-[#8b8987]"> ...</span>}
+                <div className={`text-[13px] text-[#c7c6c3] flex-1 font-normal leading-[1.45] tracking-tight min-w-0 ${isExpanded ? 'whitespace-normal' : 'truncate whitespace-nowrap'}`}>
+                    {tokens.map((token, tokenIndex) => {
+                        const key = `${token.text}-${tokenIndex}`;
+
+                        if (token.isMoveNumber || token.moveIndex === null || !pvUci[token.moveIndex]) {
+                            return (
+                                <span key={key} className="mr-1 text-[#bdbbb8]">
+                                    {token.text}
+                                </span>
+                            );
+                        }
+
+                        return (
+                            <button
+                                key={key}
+                                type="button"
+                                onMouseEnter={(e) => onMoveEnter?.(e, token.moveIndex)}
+                                onFocus={(e) => onMoveEnter?.(e, token.moveIndex)}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onMoveEnter?.(e, token.moveIndex);
+                                }}
+                                className="mr-1 bg-transparent border-0 p-0 text-[#d0cfcc] hover:text-white hover:underline underline-offset-2 cursor-pointer font-normal"
+                            >
+                                {token.text}
+                            </button>
+                        );
+                    })}
                 </div>
-                {remainingMoves && (
-                    <button 
-                        onClick={(e) => { e.stopPropagation(); setIsExpanded(!isExpanded); }} 
-                        className="p-1 text-[#8b8987] hover:text-white transition-colors"
+                {hasOverflow && (
+                    <button
+                        type="button"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setIsExpanded(!isExpanded);
+                        }}
+                        className="mt-[1px] p-0 text-[#8b8987] hover:text-white transition-colors shrink-0"
+                        aria-label={isExpanded ? 'Collapse engine line' : 'Expand engine line'}
                     >
-                        {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                        {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                     </button>
                 )}
             </div>
-            {isExpanded && remainingMoves && (
-                <div className="px-[60px] pb-2 text-[11px] text-[#8b8987] leading-relaxed animate-in slide-in-from-top-1 duration-200">
-                    {remainingMoves}
-                </div>
-            )}
         </div>
     );
 };

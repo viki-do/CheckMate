@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, Search } from 'lucide-react';
 import { moves as moveAssets } from '../../constants/review';
 
 // Hozzá kell adni az onClick-et a propokhoz és a div-hez is!
@@ -19,10 +19,11 @@ export const AnalysisMenuItem = ({ icon, label, onClick }) => (
 const EvalBox = ({ value }) => {
     const isMate = String(value).startsWith('M');
     const numericEval = parseFloat(value);
-    const isWhiteBetter = isMate ? !String(value).includes('-') : numericEval >= 0;
+    const safeEval = Number.isFinite(numericEval) ? numericEval : 0;
+    const isWhiteBetter = isMate ? !String(value).includes('-') : safeEval >= 0;
     return (
-        <div className={`w-14 py-0.5 rounded text-[11px] font-black shrink-0 text-center shadow-sm ${isWhiteBetter ? "bg-white text-black" : "bg-[#121212] text-white border border-white/20"}`}>
-            {isMate ? value : (numericEval > 0 ? `+${numericEval.toFixed(2)}` : (numericEval === 0 ? "0.00" : numericEval.toFixed(2)))}
+        <div className={`w-[52px] h-[22px] flex items-center justify-center rounded-[3px] text-[13px] font-black shrink-0 text-center shadow-sm ${isWhiteBetter ? "bg-white text-black" : "bg-[#121212] text-white border border-white/20"}`}>
+            {isMate ? value : (safeEval > 0 ? `+${safeEval.toFixed(2)}` : (safeEval === 0 ? "0.00" : safeEval.toFixed(2)))}
         </div>
     );
 };
@@ -62,22 +63,25 @@ export const PieceNotation = ({ move, isBlack }) => {
     );
 };
 
-export const EngineLineSpecial = ({ type, eval: ev, text, subtext, colorFn }) => {
+export const EngineLineSpecial = ({ type, eval: ev, text, preview, colorFn, showBorder = true }) => {
     const asset = moveAssets[type?.toLowerCase()];
     const textColor = colorFn(type);
     return (
-        <div className="flex items-center gap-2 p-1.5 rounded hover:bg-[#ffffff05] cursor-pointer group transition-all">
+        <div className={`h-[36px] px-3 cursor-default group ${showBorder ? 'border-b border-[#34322f]' : ''}`}>
+            <div className="h-full flex items-center gap-2">
             <EvalBox value={ev} />
-            <div className="w-5 h-5 shrink-0 flex items-center justify-center">
+            <div className="w-[20px] h-[20px] shrink-0 flex items-center justify-center">
                 {asset?.src ? (
                     <img src={asset.src} alt={type} className="w-full h-full object-contain animate-in zoom-in duration-300" />
                 ) : (
                     <div className="w-full h-full bg-[#3c3a37] rounded flex items-center justify-center text-[10px]">★</div>
                 )}
             </div>
-            <div className="flex flex-col min-w-0">
-                <span className={`text-xs font-bold leading-none ${textColor}`}>{text}</span>
-                <span className="text-[10px] text-[#8b8987] truncate opacity-80">{subtext}</span>
+            <div className="flex items-center min-w-0 flex-1 gap-2">
+                <span className={`text-[15px] font-black leading-tight truncate ${textColor}`}>{text}</span>
+                {preview ? <span className="text-[12px] text-[#bdbbb8] font-bold truncate">{preview}</span> : null}
+            </div>
+            <Search size={16} strokeWidth={3} className="text-[#8f8e8b] group-hover:text-white shrink-0" />
             </div>
         </div>
     );
@@ -126,22 +130,42 @@ export const MoveItem = ({ move, isActive, onClick, isBlack, prefixText = '' }) 
     );
 };
 
-export const TabItem = ({ icon, label, active }) => (
-    <div className={`flex-1 flex flex-col items-center py-2.5 cursor-pointer transition-colors border-b-2 ${active ? 'bg-[#262421] border-[#81b64c] text-white' : 'border-transparent text-[#8b8987] hover:bg-[#2b2a27]'}`}>
+export const TabItem = ({ icon, label, active, onClick }) => (
+    <button
+        type="button"
+        onClick={onClick}
+        className={`flex-1 flex flex-col items-center py-2.5 cursor-pointer transition-colors border-b-2 bg-transparent ${active ? 'bg-[#262421] border-[#81b64c] text-white' : 'border-transparent text-[#8b8987] hover:bg-[#2b2a27]'}`}
+    >
         {icon}
         <span className="text-[9px] font-bold mt-1 uppercase tracking-wider">{label}</span>
-    </div>
+    </button>
 );
 
-export const ControlBtn = ({ icon, onClick }) => (
-    <button onClick={onClick} className="flex-1 py-2 bg-[#312e2b] hover:bg-[#3d3a37] rounded flex items-center justify-center font-bold text-[#bab9b8] border-b-2 border-black/20 active:border-b-0 active:translate-y-[1px] transition-all">
+export const ControlBtn = ({ icon, onClick, disabled = false }) => (
+    <button
+        type="button"
+        disabled={disabled}
+        onClick={disabled ? undefined : onClick}
+        className={`flex-1 py-2 bg-[#312e2b] rounded flex items-center justify-center font-bold text-[#bab9b8] border-b-2 border-black/20 transition-all ${
+            disabled
+                ? 'opacity-35 cursor-not-allowed'
+                : 'hover:bg-[#3d3a37] active:border-b-0 active:translate-y-[1px]'
+        }`}
+    >
         {icon}
     </button>
 );
 
-export const FooterAction = ({ icon, label, onClick }) => (
-    <div className="flex flex-col items-center justify-center gap-0.5 cursor-pointer group px-2" onClick={onClick}>
-        <div className="text-[#bab9b8] group-hover:text-white transition-colors">{icon}</div>
-        <span className="text-[9px] font-bold text-[#8b8987] group-hover:text-white uppercase">{label}</span>
-    </div>
+export const FooterAction = ({ icon, label, onClick, disabled = false }) => (
+    <button
+        type="button"
+        disabled={disabled}
+        onClick={disabled ? undefined : onClick}
+        className={`flex flex-col items-center justify-center gap-0.5 group px-2 bg-transparent border-0 ${
+            disabled ? 'cursor-not-allowed opacity-35' : 'cursor-pointer'
+        }`}
+    >
+        <div className={`transition-colors ${disabled ? 'text-[#6f6d69]' : 'text-[#bab9b8] group-hover:text-white'}`}>{icon}</div>
+        <span className={`text-[9px] font-bold uppercase ${disabled ? 'text-[#6f6d69]' : 'text-[#8b8987] group-hover:text-white'}`}>{label}</span>
+    </button>
 );

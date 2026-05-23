@@ -30,7 +30,12 @@ def load_tracked_usernames():
 
 
 def sql_player_name(column):
-    return f"replace(replace(replace(lower({column}), '_', ' '), '-', ' '), ',', ' ')"
+    return (
+        "trim(regexp_replace("
+        f"regexp_replace(replace(replace(replace(replace(lower({column}), '_', ' '), '-', ' '), ',', ' '), '.', ' '), "
+        r"'\([^)]*\)', ' ', 'g'), "
+        r"'\s+', ' ', 'g'))"
+    )
 
 
 def bind_values(prefix, values):
@@ -63,6 +68,53 @@ def count_player_games(db, variants):
     """), params).scalar() or 0)
 
 
+def count_chesscom_master_games(db, player_slug, variants):
+    linked_count = int(db.execute(text("""
+        SELECT COUNT(*)
+        FROM imported_game_player_sources
+        WHERE player_slug = :player_slug
+          AND source = 'chesscom-master'
+    """), {"player_slug": player_slug}).scalar() or 0)
+    if linked_count:
+        return linked_count
+
+    object_key = f"pgn-imports/chesscom-master/{player_slug}/master-games.pgn"
+    updates_prefix = f"pgn-imports/chesscom-master/{player_slug}/updates/%"
+    file_rows = [
+        row[0]
+        for row in db.execute(text("""
+            SELECT object_key
+            FROM imported_pgn_files
+            WHERE object_key = :object_key OR object_key LIKE :updates_prefix
+        """), {"object_key": object_key, "updates_prefix": updates_prefix}).all()
+    ]
+    object_keys = file_rows
+    if object_key not in object_keys:
+        object_keys.insert(0, object_key)
+    if not object_keys:
+        return 0
+
+    object_key_params = {
+        f"object_key_{index}": value
+        for index, value in enumerate(object_keys)
+    }
+    object_key_sql = ", ".join(f":object_key_{index}" for index in range(len(object_keys)))
+    return int(db.execute(text("""
+        SELECT COUNT(*)
+        FROM (
+            SELECT DISTINCT ON (white, black, game_date, result, md5(COALESCE(moves, ''))) id
+            FROM imported_games
+            WHERE pgn_object_key IN (""" + object_key_sql + """)
+              AND white <> 'Unknown'
+              AND black <> 'Unknown'
+            ORDER BY
+              white, black, game_date, result, md5(COALESCE(moves, '')),
+              CASE WHEN pgn_object_key = :object_key THEN 0 ELSE 1 END,
+              id
+        ) unique_games
+    """), {"object_key": object_key, **object_key_params}).scalar() or 0)
+
+
 def sync_player_catalog(db):
     tracked_usernames = load_tracked_usernames()
     seen_names = set()
@@ -85,7 +137,7 @@ def sync_player_catalog(db):
         record.chesscom_username = tracked_usernames.get(name)
         record.chesscom_master_slug = slugify_player_name(name)
         record.aliases = json.dumps(variants, ensure_ascii=False)
-        record.games = count_player_games(db, variants)
+        record.games = count_chesscom_master_games(db, record.chesscom_master_slug, variants)
         record.is_catalog = True
 
     if seen_names:

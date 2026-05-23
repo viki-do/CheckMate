@@ -26,8 +26,13 @@ const MoveListPanel = ({
     result,
     opening,
     handleRunFullAnalysis,
+    onGameReviewClick,
+    onSelfAnalysisClick,
     analysisData,
-    isAnalyzing
+    isAnalyzing,
+    onAddToCollection,
+    onDeleteGame,
+    isArchiveGame = false
 }) => {
     const isOngoing = status === "ongoing";
     const isGameOver = ["resigned", "checkmate", "draw", "stalemate", "aborted", "finished"].includes(status);
@@ -53,7 +58,7 @@ const MoveListPanel = ({
 
     return (
         <div className="w-112.5 h-185 bg-[#262421] flex flex-col font-sans border border-chess-bg rounded-xl overflow-hidden shadow-2xl">
-            <AccuracyHeader analysisData={analysisData} />
+            {!isArchiveGame && <AccuracyHeader analysisData={analysisData} />}
             <OpeningHeader opening={opening} />
 
             <div className="flex-1 overflow-y-auto no-scrollbar bg-[#262421]">
@@ -82,7 +87,12 @@ const MoveListPanel = ({
                 offerDraw={offerDraw}
                 resetGame={resetGame}
                 handleRunFullAnalysis={handleRunFullAnalysis}
+                onGameReviewClick={onGameReviewClick}
+                onSelfAnalysisClick={onSelfAnalysisClick}
                 onDownloadTable={handleDownloadTable}
+                onAddToCollection={onAddToCollection}
+                onDeleteGame={onDeleteGame}
+                isArchiveGame={isArchiveGame}
             />
         </div>
     );

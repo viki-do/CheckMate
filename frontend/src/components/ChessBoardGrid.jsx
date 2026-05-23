@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useId, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Chess } from 'chess.js';
 
@@ -8,12 +8,25 @@ const piecesMap = {
 };
 
 const ChessBoardGrid = ({ gameLogic, onMouseDown, onMouseUp, onDrop }) => {
+    const boardInstanceId = useId();
     const boardRef = useRef(null); // Ref a táblához a passzív eseménykezelő fixhez
 
     const {
-        fen, selectedSquare, lastMove, validMoves, premoves = [], isDragging,
-        hoverSquare, mousePos, isAlert, status,
-        viewIndex, getSquareName, isFlipped, handleMouseUp
+        fen,
+        selectedSquare = null,
+        lastMove = { from: null, to: null },
+        validMoves = [],
+        premoves = [],
+        isDragging = false,
+        hoverSquare = null,
+        mousePos = { x: 0, y: 0 },
+        isAlert = false,
+        status = "viewing",
+        viewIndex = -1,
+        getSquareName = (row, col) => `${['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'][col]}${8 - row}`,
+        isFlipped = false,
+        compact = false,
+        handleMouseUp = onMouseUp || (() => {})
     } = gameLogic;
 
     // --- TECHNIKAI JAVÍTÁS A KONZOL HIBÁHOZ ---
@@ -97,7 +110,7 @@ const ChessBoardGrid = ({ gameLogic, onMouseDown, onMouseUp, onDrop }) => {
             boardCells.push(
                 <div
                     key={sqName}
-                    onMouseDown={(e) => onMouseDown(e, i, j)}
+                    onMouseDown={(e) => onMouseDown?.(e, i, j)}
                     onMouseUp={() => handleMouseUp()} 
                     onDragOver={(e) => {
                         e.preventDefault(); // Kötelező: engedélyezi a dobást
@@ -107,11 +120,11 @@ const ChessBoardGrid = ({ gameLogic, onMouseDown, onMouseUp, onDrop }) => {
                         e.preventDefault();
                         if (onDrop) onDrop(e, i, j); // Meghívjuk a szülő handleExternalDrop függvényét
                     }}
-                    onTouchStart={(e) => onMouseDown(e, i, j)}
+                    onTouchStart={(e) => onMouseDown?.(e, i, j)}
                     onTouchEnd={(e) => {
                         handleMouseUp();
                     }}
-                    className={`w-21.25 h-21.25 flex justify-center items-center relative select-none transition-colors duration-150 ${currentBgColor} ${piece && status === "ongoing" && viewIndex === -1 ? 'cursor-grab' : 'cursor-default'}`}
+                    className={`w-full h-full flex justify-center items-center relative select-none transition-colors duration-150 ${currentBgColor} ${piece && status === "ongoing" && viewIndex === -1 ? 'cursor-grab' : 'cursor-default'}`}
                     style={{
                         ...bgStyle,
                         outlineWidth: '3px',
@@ -123,13 +136,13 @@ const ChessBoardGrid = ({ gameLogic, onMouseDown, onMouseUp, onDrop }) => {
                     }}
                 >
                     {(isFlipped ? j === 7 : j === 0) && (
-                        <span className={`absolute top-0.5 left-1 text-[16px] font-semibold pointer-events-none ${(isSelected || isLast) ? (isDark ? 'text-[#f5f681]' : 'text-[#b9cb43]') : (isDark ? 'text-chess-light' : 'text-chess-dark')}`}>
+                        <span className={`absolute top-0.5 left-1 ${compact ? 'text-[5px]' : 'text-[16px]'} font-semibold pointer-events-none ${(isSelected || isLast) ? (isDark ? 'text-[#f5f681]' : 'text-[#b9cb43]') : (isDark ? 'text-chess-light' : 'text-chess-dark')}`}>
                             {8 - i}
                         </span>
                     )}
 
                     {(isFlipped ? i === 0 : i === 7) && (
-                        <span className={`absolute bottom-0.5 right-1 text-[16px] font-semibold pointer-events-none ${(isSelected || isLast) ? (isDark ? 'text-[#f5f681]' : 'text-[#b9cb43]') : (isDark ? 'text-chess-light' : 'text-chess-dark')}`}>
+                        <span className={`absolute bottom-0.5 right-1 ${compact ? 'text-[5px]' : 'text-[16px]'} font-semibold pointer-events-none ${(isSelected || isLast) ? (isDark ? 'text-[#f5f681]' : 'text-[#b9cb43]') : (isDark ? 'text-chess-light' : 'text-chess-dark')}`}>
                             {['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'][j]}
                         </span>
                     )}
@@ -146,8 +159,8 @@ const ChessBoardGrid = ({ gameLogic, onMouseDown, onMouseUp, onDrop }) => {
 
                     {piece && (!isDragging || selectedSquare !== sqName) && (
                         <motion.img
-                            layout
-                            layoutId={`sq-${sqName}-${isFlipped}`}
+                            layout={!compact}
+                            layoutId={compact ? undefined : `${boardInstanceId}-sq-${sqName}-${isFlipped}`}
                             key={`piece-${sqName}-${piece}-${isFlipped}`}
                             src={`/assets/pieces/${piecesMap[piece]}.png`}
                             draggable="false"
@@ -170,7 +183,7 @@ const ChessBoardGrid = ({ gameLogic, onMouseDown, onMouseUp, onDrop }) => {
         <div 
             ref={boardRef} // A ref ide kerül a technikai fixhez
             id="chess-board" 
-            className="w-170 h-170 grid grid-cols-8 border-2 border-chess-board-border relative z-0"
+            className={`w-full h-full grid grid-cols-8 grid-rows-8 relative z-0 ${compact ? 'border border-[#2c2a27]' : 'border-2 border-chess-board-border'}`}
         >
             {boardCells}
 

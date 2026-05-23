@@ -1,4 +1,6 @@
 import NavBtn from './NavBtn';
+import { Download, Trash2 } from 'lucide-react';
+import { AddToCollection, New, Review, Share } from '../icons/Icons';
 
 const MoveListControls = ({
     history,
@@ -15,16 +17,21 @@ const MoveListControls = ({
     offerDraw,
     resetGame,
     handleRunFullAnalysis,
+    onGameReviewClick,
+    onSelfAnalysisClick,
     onDownloadTable,
+    onAddToCollection,
+    onDeleteGame,
+    isArchiveGame = false,
 }) => (
     <div className="bg-chess-panel-header flex flex-col border-t border-[#1b1a18]">
         {showEndGameUI && (
             <div className="p-3 border-b border-chess-bg bg-chess-panel-header animate-in fade-in duration-300">
                 <button
-                    onClick={handleRunFullAnalysis}
-                    className="w-full py-3 bg-[#81b64c] hover:bg-[#a3d16a] text-white font-bold rounded-lg flex items-center justify-center gap-2 transition-all shadow-lg text-lg"
+                    onClick={onGameReviewClick || handleRunFullAnalysis}
+                    className="w-full py-4 bg-[#81b64c] hover:bg-[#a3d16a] text-white font-black rounded-lg flex items-center justify-center gap-2.5 transition-all shadow-lg text-xl"
                 >
-                    <i className="fas fa-microscope"></i> Game Review
+                    <Review size={26} /> Game Review
                 </button>
                 <div className="grid grid-cols-2 gap-2 pt-3">
                     <button
@@ -86,15 +93,57 @@ const MoveListControls = ({
                     <button onClick={handleResign} className="flex items-center gap-2 hover:text-white transition-colors text-[#e74c3c]"><i className="fas fa-flag text-sm"></i><span className="text-[13px] font-bold">Resign</span></button>
                 </div>
             ) : (
-                <div className="flex gap-6 items-center w-full justify-center text-[#bab9b8]">
-                    <i className="fas fa-share-alt hover:text-white cursor-pointer transition-colors text-lg"></i>
-                    <i
+                <div className={`flex items-center w-full text-[#bab9b8] ${isArchiveGame ? 'justify-between' : 'justify-center gap-8'}`}>
+                    <div className={`flex items-center ${isArchiveGame ? 'gap-5' : 'gap-8'}`}>
+                    <button type="button" className="hover:text-white cursor-pointer transition-colors flex items-center" title="Share">
+                        <Share size={20} />
+                    </button>
+                    <button
+                        type="button"
                         onClick={onDownloadTable}
-                        className="fas fa-download hover:text-white cursor-pointer transition-colors text-lg"
+                        className="hover:text-white cursor-pointer transition-colors flex items-center"
                         title="Download Spreadsheet"
-                    ></i>
-                    <i className="fas fa-cog hover:text-white cursor-pointer transition-colors text-lg"></i>
-                    <i onClick={onFlipBoard} className={`fas fa-sync-alt hover:text-white cursor-pointer transition-all text-lg ${isFlipped ? 'rotate-180 text-[#81b64c]' : ''}`} title="Flip Board"></i>
+                    >
+                        <Download size={20} strokeWidth={2.7} />
+                    </button>
+                    <button
+                        type="button"
+                        onClick={onAddToCollection}
+                        className="hover:text-white cursor-pointer transition-colors flex items-center"
+                        title="Add to Collection"
+                    >
+                        <AddToCollection size={21} />
+                    </button>
+                    {!isArchiveGame && (
+                        <i onClick={onFlipBoard} className={`fas fa-sync-alt hover:text-white cursor-pointer transition-all text-lg ${isFlipped ? 'rotate-180 text-[#81b64c]' : ''}`} title="Flip Board"></i>
+                    )}
+                    {isArchiveGame && (
+                        <>
+                            <button
+                                type="button"
+                                onClick={onSelfAnalysisClick}
+                                className="hover:text-white cursor-pointer transition-colors flex items-center"
+                                title="Self Analysis"
+                                aria-label="Self Analysis"
+                            >
+                                <New size={21} />
+                            </button>
+                            <button
+                                type="button"
+                                onClick={onDeleteGame}
+                                className="hover:text-[#ff746d] cursor-pointer transition-colors flex items-center"
+                                title="Delete Game"
+                            >
+                                <Trash2 size={20} strokeWidth={2.7} />
+                            </button>
+                        </>
+                    )}
+                    </div>
+                    {isArchiveGame && (
+                        <div className="flex gap-5 items-center">
+                            <i onClick={onFlipBoard} className={`fas fa-sync-alt hover:text-white cursor-pointer transition-all text-lg ${isFlipped ? 'rotate-180 text-[#81b64c]' : ''}`} title="Flip Board"></i>
+                        </div>
+                    )}
                 </div>
             )}
             {isOngoing && (

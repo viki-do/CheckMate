@@ -17,6 +17,17 @@ import SearchBox from './SearchBox';
 import { latestComments } from '../../constants/databasePlayers';
 import { getPlayerFacts, getPlayerImage } from '../../utils/databaseFormatters';
 
+const ResultBarSkeleton = ({ label }) => (
+  <div>
+    <div className="text-[#bab9b8] font-bold text-lg mb-1">
+      {label} <span className="inline-block h-5 w-14 bg-[#3c3a37] align-middle" />
+    </div>
+    <div className="h-7 w-full bg-[#3c3a37] overflow-hidden">
+      <div className="h-full w-2/3 bg-[#4a4742]" />
+    </div>
+  </div>
+);
+
 const PlayerProfileView = ({
   selectedPlayer,
   playerProfile,
@@ -35,14 +46,8 @@ const PlayerProfileView = ({
 }) => {
   const [isSortOpen, setIsSortOpen] = useState(false);
   const facts = getPlayerFacts(selectedPlayer.name);
-  const profile = playerProfile || {
-    games: selectedPlayer.games,
-    as_white: 0,
-    as_black: 0,
-    wins: 0,
-    draws: 0,
-    losses: 0,
-  };
+  const profile = playerProfile;
+  const isProfileLoading = !profile;
   const image = getPlayerImage(selectedPlayer.name);
   const sortOptions = [
     { value: 'rating_white', label: 'Rating (White)' },
@@ -130,29 +135,37 @@ const PlayerProfileView = ({
               </div>
             </div>
 
-            <div className="mt-10 space-y-4">
-              <ResultBar
-                label="Total Games"
-                total={profile.games}
-                wins={profile.wins}
-                draws={profile.draws}
-                losses={profile.losses}
-              />
-              <ResultBar
-                label="As White"
-                total={profile.as_white}
-                wins={profile.white_wins}
-                draws={profile.white_draws}
-                losses={profile.white_losses}
-              />
-              <ResultBar
-                label="As Black"
-                total={profile.as_black}
-                wins={profile.black_wins}
-                draws={profile.black_draws}
-                losses={profile.black_losses}
-              />
-            </div>
+            {isProfileLoading ? (
+              <div className="mt-10 space-y-4">
+                <ResultBarSkeleton label="Total Games" />
+                <ResultBarSkeleton label="As White" />
+                <ResultBarSkeleton label="As Black" />
+              </div>
+            ) : (
+              <div className="mt-10 space-y-4">
+                <ResultBar
+                  label="Total Games"
+                  total={profile.games}
+                  wins={profile.wins}
+                  draws={profile.draws}
+                  losses={profile.losses}
+                />
+                <ResultBar
+                  label="As White"
+                  total={profile.as_white}
+                  wins={profile.white_wins}
+                  draws={profile.white_draws}
+                  losses={profile.white_losses}
+                />
+                <ResultBar
+                  label="As Black"
+                  total={profile.as_black}
+                  wins={profile.black_wins}
+                  draws={profile.black_draws}
+                  losses={profile.black_losses}
+                />
+              </div>
+            )}
 
             <div className="mt-10 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
               <h2 className="text-3xl font-black text-white">{selectedPlayer.name} Chess Games</h2>

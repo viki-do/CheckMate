@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Enum, DateTime, ForeignKey, Text, Float, Index, Boolean
+from sqlalchemy import Column, Integer, String, Enum, DateTime, ForeignKey, Text, Float, Index, Boolean, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy import func
 from database import Base
@@ -53,6 +53,7 @@ class Game(Base):
     player_color = Column(String, default="white")
     white_accuracy = Column(Float, nullable=True)
     black_accuracy = Column(Float, nullable=True)
+    reviewed_at = Column(DateTime, nullable=True)
 
 
 class Move(Base):
@@ -125,3 +126,18 @@ class ImportedPgnFile(Base):
     error = Column(Text, nullable=True)
     started_at = Column(DateTime, server_default=func.now())
     completed_at = Column(DateTime, nullable=True)
+
+
+class ImportedGamePlayerSource(Base):
+    __tablename__ = "imported_game_player_sources"
+    __table_args__ = (
+        UniqueConstraint("game_id", "player_slug", "source", name="uq_imported_game_player_source"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    game_id = Column(Integer, ForeignKey("imported_games.id", ondelete="CASCADE"), nullable=False, index=True)
+    player_slug = Column(String(255), nullable=False, index=True)
+    source = Column(String(50), nullable=False, default="chesscom-master", index=True)
+    source_object_key = Column(String(512), nullable=True, index=True)
+    source_game_id = Column(String(50), nullable=True, index=True)
+    imported_at = Column(DateTime, server_default=func.now())

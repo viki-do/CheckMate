@@ -3,6 +3,7 @@ import json
 import re
 from pathlib import Path
 
+import chess
 import chess.pgn
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy import func, or_, text
@@ -65,6 +66,74 @@ def serialize_game(game):
     }
 
 
+def parse_first_move_record(moves_text: str, result: str = ""):
+    if not moves_text:
+        return None
+
+    try:
+        game = chess.pgn.read_game(io.StringIO(f"{moves_text} {result or '*'}".strip()))
+        if not game:
+            return None
+
+        board = game.board()
+        first_move = next(game.mainline_moves(), None)
+        if not first_move:
+            return None
+
+        san = board.san(first_move)
+        return san
+    except Exception:
+        return None
+
+
+FIRST_MOVE_EVALS = {
+    "e4": 0.22,
+    "d4": 0.26,
+    "Nf3": 0.28,
+    "c4": 0.19,
+    "b3": -0.06,
+    "f4": -0.20,
+    "g3": 0.15,
+    "a3": -0.05,
+    "e3": 0.13,
+    "Nc3": -0.06,
+    "d3": -0.19,
+}
+
+
+def clean_first_move_token(token: str):
+    cleaned = re.sub(r"[!?+#]+$", "", str(token or "").strip())
+    return cleaned or None
+
+
+def extract_first_move_fast(moves_text: str):
+    text_value = re.sub(r"\{[^}]*\}|\([^)]*\)|\$\d+", " ", str(moves_text or ""))
+    text_value = re.sub(r"^\s*1\.(?:\.\.)?\s*", "", text_value.strip())
+    token = text_value.split()[0] if text_value.split() else ""
+    token = re.sub(r"^\d+\.(?:\.\.)?", "", token)
+    token = clean_first_move_token(token)
+    if token in {"1-0", "0-1", "1/2-1/2", "*"}:
+        return None
+    return token
+
+
+def tokenize_moves_fast(moves_text: str):
+    text_value = re.sub(r"\{[^}]*\}|\([^)]*\)|\$\d+", " ", str(moves_text or ""))
+    tokens = []
+    for token in text_value.replace("\n", " ").split():
+        cleaned = re.sub(r"^\d+\.(?:\.\.)?", "", token.strip())
+        cleaned = clean_first_move_token(cleaned)
+        if not cleaned or cleaned in {"1-0", "0-1", "1/2-1/2", "*"}:
+            continue
+        tokens.append(cleaned)
+    return tokens
+
+
+def format_ply_move(ply_index: int, move_san: str):
+    move_number = (ply_index // 2) + 1
+    return f"{move_number}. {move_san}" if ply_index % 2 == 0 else f"{move_number}... {move_san}"
+
+
 def player_name_variants(name: str):
     cleaned = name.strip().lower()
     variants = {cleaned}
@@ -76,7 +145,12 @@ def player_name_variants(name: str):
 
 
 def sql_player_name(column: str):
-    return f"replace(replace(replace(lower({column}), '_', ' '), '-', ' '), ',', ' ')"
+    return (
+        "trim(regexp_replace("
+        f"regexp_replace(replace(replace(replace(replace(lower({column}), '_', ' '), '-', ' '), ',', ' '), '.', ' '), "
+        r"'\([^)]*\)', ' ', 'g'), "
+        r"'\s+', ' ', 'g'))"
+    )
 
 
 def catalog_variants_for_player(player):
@@ -108,6 +182,67 @@ def get_catalog_variants_for_name(name: str):
         if requested in variants:
             return player["name"], variants
     return name, player_name_variants(name)
+
+
+def get_catalog_master_object_key(name: str):
+    canonical_name, variants = get_catalog_variants_for_name(name)
+    for player in HISTORICAL_PLAYERS:
+        if player["name"] == canonical_name:
+            slug = re.sub(r"[^a-z0-9]+", "-", normalize_for_match(canonical_name)).strip("-")
+            return f"pgn-imports/chesscom-master/{slug}/master-games.pgn", variants
+    return None, variants
+
+
+def get_catalog_master_scope(name: str):
+    master_object_key, variants = get_catalog_master_object_key(name)
+    if not master_object_key:
+        return None, None, None, variants
+    return (
+        master_object_key,
+        master_object_key.rsplit("/", 1)[0] + "/updates/%",
+        master_object_key.rsplit("/", 1)[0] + "/%",
+        variants,
+    )
+
+
+def master_object_keys_for_scope(db: Session, master_object_key: str, master_updates_prefix: str):
+    rows = (
+        db.query(models.ImportedPgnFile.object_key)
+        .filter(or_(
+            models.ImportedPgnFile.object_key == master_object_key,
+            models.ImportedPgnFile.object_key.like(master_updates_prefix),
+        ))
+        .all()
+    )
+    object_keys = [row.object_key for row in rows]
+    if master_object_key not in object_keys:
+        object_keys.insert(0, master_object_key)
+    return object_keys
+
+
+def bind_master_object_keys(query_params, object_keys):
+    placeholders = []
+    for index, object_key in enumerate(object_keys):
+        key = f"master_object_key_{index}"
+        query_params[key] = object_key
+        placeholders.append(f":{key}")
+    return ", ".join(placeholders)
+
+
+def unique_master_games_cte():
+    return """
+        WITH unique_master_games AS (
+            SELECT DISTINCT g.id, g.event, g.site, g.game_date, g.round, g.white, g.black,
+                   g.white_elo, g.black_elo, g.result, g.eco, g.opening, g.ply_count,
+                   g.source, g.pgn_object_key, g.moves
+            FROM imported_games g
+            JOIN imported_game_player_sources s ON s.game_id = g.id
+            WHERE s.player_slug = :master_player_slug
+              AND s.source = 'chesscom-master'
+              AND g.white <> 'Unknown'
+              AND g.black <> 'Unknown'
+        )
+    """
 
 
 def bind_values(prefix: str, values):
@@ -279,12 +414,15 @@ def database_summary(
     db: Session = Depends(get_db),
 ):
     try:
-        indexed_games = int(db.query(func.count(models.ImportedGame.id)).scalar() or 0)
+        indexed_games = int(db.query(func.count(models.ImportedGame.id)).filter(
+            models.ImportedGame.pgn_object_key.like("pgn-imports/chesscom-master/%")
+        ).scalar() or 0)
         imported_file_games = int(db.query(func.sum(models.ImportedPgnFile.games_imported)).filter(
-            models.ImportedPgnFile.status == "complete"
+            models.ImportedPgnFile.status == "complete",
+            models.ImportedPgnFile.object_key.like("pgn-imports/chesscom-master/%"),
         ).scalar() or 0)
         total_games = indexed_games or imported_file_games
-        r2_archive = {"prefix": "pgn-imports/lumbras/", "object_count": 0, "size_bytes": 0, "available": False}
+        r2_archive = {"prefix": "pgn-imports/chesscom-master/", "object_count": 0, "size_bytes": 0, "available": False}
         if total_games == 0:
             try:
                 r2_archive = {**get_r2_prefix_stats(), "available": True}
@@ -315,6 +453,126 @@ def database_summary(
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
+@router.get("/explore/first-moves")
+def explore_first_moves(limit: int = Query(10, ge=1, le=20), db: Session = Depends(get_db)):
+    try:
+        limit_value = max(1, min(20, int(limit)))
+    except Exception:
+        limit_value = 10
+
+    stats = {}
+    total = 0
+    games = (
+        db.query(models.ImportedGame.moves, models.ImportedGame.result)
+        .filter(models.ImportedGame.moves.isnot(None), models.ImportedGame.moves != "")
+        .yield_per(1000)
+    )
+
+    for moves_text, result in games:
+        move = extract_first_move_fast(moves_text)
+        if not move:
+            continue
+
+        total += 1
+        row = stats.setdefault(move, {
+            "move": move,
+            "games": 0,
+            "white_wins": 0,
+            "draws": 0,
+            "black_wins": 0,
+        })
+        row["games"] += 1
+
+        clean_result = str(result or "").strip()
+        if clean_result == "1-0":
+            row["white_wins"] += 1
+        elif clean_result == "0-1":
+            row["black_wins"] += 1
+        elif clean_result == "1/2-1/2":
+            row["draws"] += 1
+
+    rows = []
+    for row in sorted(stats.values(), key=lambda item: item["games"], reverse=True)[:limit_value]:
+        games_count = max(1, int(row["games"] or 0))
+        row["percent"] = round((games_count / total) * 100, 1) if total else 0
+        row["white_win_percent"] = round((row["white_wins"] / games_count) * 100, 1)
+        row["draw_percent"] = round((row["draws"] / games_count) * 100, 1)
+        row["black_win_percent"] = round((row["black_wins"] / games_count) * 100, 1)
+        row["eval"] = FIRST_MOVE_EVALS.get(row["move"])
+        rows.append(row)
+
+    return {"total_games": total, "rows": rows}
+
+
+@router.get("/explore/next-moves")
+def explore_next_moves(
+    moves: str = "",
+    limit: int = Query(10, ge=1, le=20),
+    db: Session = Depends(get_db),
+):
+    try:
+        limit_value = max(1, min(20, int(limit)))
+    except Exception:
+        limit_value = 10
+
+    prefix = [clean_first_move_token(token) for token in str(moves or "").split(",") if clean_first_move_token(token)]
+    stats = {}
+    total = 0
+
+    games = (
+        db.query(models.ImportedGame.moves, models.ImportedGame.result)
+        .filter(models.ImportedGame.moves.isnot(None), models.ImportedGame.moves != "")
+        .yield_per(1000)
+    )
+
+    for moves_text, result in games:
+        tokens = tokenize_moves_fast(moves_text)
+        if len(tokens) <= len(prefix):
+            continue
+        if prefix and tokens[:len(prefix)] != prefix:
+            continue
+
+        next_move = tokens[len(prefix)]
+        if not next_move:
+            continue
+
+        total += 1
+        row = stats.setdefault(next_move, {
+            "move": next_move,
+            "display_move": format_ply_move(len(prefix), next_move),
+            "games": 0,
+            "white_wins": 0,
+            "draws": 0,
+            "black_wins": 0,
+        })
+        row["games"] += 1
+
+        clean_result = str(result or "").strip()
+        if clean_result == "1-0":
+            row["white_wins"] += 1
+        elif clean_result == "0-1":
+            row["black_wins"] += 1
+        elif clean_result == "1/2-1/2":
+            row["draws"] += 1
+
+    rows = []
+    for row in sorted(stats.values(), key=lambda item: item["games"], reverse=True)[:limit_value]:
+        games_count = max(1, int(row["games"] or 0))
+        row["percent"] = round((games_count / total) * 100, 1) if total else 0
+        row["white_win_percent"] = round((row["white_wins"] / games_count) * 100, 1)
+        row["draw_percent"] = round((row["draws"] / games_count) * 100, 1)
+        row["black_win_percent"] = round((row["black_wins"] / games_count) * 100, 1)
+        row["eval"] = FIRST_MOVE_EVALS.get(row["move"])
+        rows.append(row)
+
+    return {
+        "total_games": total,
+        "ply": len(prefix) + 1,
+        "line": " ".join(prefix),
+        "rows": rows,
+    }
+
+
 @router.get("/players")
 def players(
     limit: int = Query(24, ge=1, le=100),
@@ -333,42 +591,81 @@ def player_profile(
     db: Session = Depends(get_db),
 ):
     canonical_name, variants = get_catalog_variants_for_name(name)
+    master_object_key, master_updates_prefix, master_object_prefix, variants = get_catalog_master_scope(name)
     if not variants:
         raise HTTPException(status_code=400, detail="Missing player name")
 
     query_params = bind_values("player", variants)
     where_clause = player_game_clause(variants)
+    if master_object_key:
+        query_params["master_object_key"] = master_object_key
+        query_params["master_player_slug"] = master_object_key.split("/")[-2]
+        query_params["master_object_prefix"] = master_object_prefix
     white_name = sql_player_name("white")
     black_name = sql_player_name("black")
     player_sql = placeholders("player", variants)
+    source_table = "unique_master_games" if master_object_key else "imported_games"
+    source_prefix = unique_master_games_cte() if master_object_key else ""
+    source_where = "" if master_object_key else f"WHERE {where_clause}"
 
     total_games = int(db.execute(text(f"""
+        {source_prefix}
         SELECT COUNT(*)
-        FROM imported_games
-        WHERE {where_clause}
+        FROM {source_table}
+        {source_where}
     """), query_params).scalar() or 0)
 
+    player_is_white = f"{white_name} IN ({player_sql})"
+    player_is_black = f"{black_name} IN ({player_sql})"
+    player_is_present = f"({player_is_white} OR {player_is_black})"
+
     row = db.execute(text(f"""
+        {source_prefix}
         SELECT
-            COUNT(*) FILTER (WHERE {white_name} IN ({player_sql})) AS as_white,
-            COUNT(*) FILTER (WHERE {black_name} IN ({player_sql})) AS as_black,
+            COUNT(*) FILTER (WHERE {player_is_white}) AS as_white,
+            COUNT(*) FILTER (WHERE {player_is_black}) AS as_black,
             COUNT(*) FILTER (
-                WHERE ({white_name} IN ({player_sql}) AND result = '1-0')
-                   OR ({black_name} IN ({player_sql}) AND result = '0-1')
+                WHERE ({player_is_white} AND result = '1-0')
+                   OR ({player_is_black} AND result = '0-1')
             ) AS wins,
             COUNT(*) FILTER (WHERE result IN ('1/2-1/2', '1/2', '½-½')) AS draws,
             COUNT(*) FILTER (
-                WHERE ({white_name} IN ({player_sql}) AND result = '0-1')
-                   OR ({black_name} IN ({player_sql}) AND result = '1-0')
+                WHERE ({player_is_white} AND result = '0-1')
+                   OR ({player_is_black} AND result = '1-0')
             ) AS losses,
-            COUNT(*) FILTER (WHERE {white_name} IN ({player_sql}) AND result = '1-0') AS white_wins,
+            COUNT(*) FILTER (WHERE {player_is_white} AND result = '1-0') AS white_wins,
             COUNT(*) FILTER (WHERE {white_name} IN ({player_sql}) AND result IN ('1/2-1/2', '1/2', '½-½')) AS white_draws,
-            COUNT(*) FILTER (WHERE {white_name} IN ({player_sql}) AND result = '0-1') AS white_losses,
-            COUNT(*) FILTER (WHERE {black_name} IN ({player_sql}) AND result = '0-1') AS black_wins,
+            COUNT(*) FILTER (WHERE {player_is_white} AND result = '0-1') AS white_losses,
+            COUNT(*) FILTER (WHERE {player_is_black} AND result = '0-1') AS black_wins,
             COUNT(*) FILTER (WHERE {black_name} IN ({player_sql}) AND result IN ('1/2-1/2', '1/2', '½-½')) AS black_draws,
-            COUNT(*) FILTER (WHERE {black_name} IN ({player_sql}) AND result = '1-0') AS black_losses
-        FROM imported_games
-        WHERE {where_clause}
+            COUNT(*) FILTER (WHERE {player_is_black} AND result = '1-0') AS black_losses
+        FROM {source_table}
+        {source_where}
+    """), query_params).first()
+
+    draw_result = "result LIKE '1/2%'"
+    row = db.execute(text(f"""
+        {source_prefix}
+        SELECT
+            COUNT(*) FILTER (WHERE {player_is_white}) AS as_white,
+            COUNT(*) FILTER (WHERE {player_is_black}) AS as_black,
+            COUNT(*) FILTER (
+                WHERE ({player_is_white} AND result = '1-0')
+                   OR ({player_is_black} AND result = '0-1')
+            ) AS wins,
+            COUNT(*) FILTER (WHERE {player_is_present} AND {draw_result}) AS draws,
+            COUNT(*) FILTER (
+                WHERE ({player_is_white} AND result = '0-1')
+                   OR ({player_is_black} AND result = '1-0')
+            ) AS losses,
+            COUNT(*) FILTER (WHERE {player_is_white} AND result = '1-0') AS white_wins,
+            COUNT(*) FILTER (WHERE {player_is_white} AND {draw_result}) AS white_draws,
+            COUNT(*) FILTER (WHERE {player_is_white} AND result = '0-1') AS white_losses,
+            COUNT(*) FILTER (WHERE {player_is_black} AND result = '0-1') AS black_wins,
+            COUNT(*) FILTER (WHERE {player_is_black} AND {draw_result}) AS black_draws,
+            COUNT(*) FILTER (WHERE {player_is_black} AND result = '1-0') AS black_losses
+        FROM {source_table}
+        {source_where}
     """), query_params).first()
 
     data = row._mapping if row else {}
@@ -388,7 +685,6 @@ def player_profile(
         "black_losses": int(data.get("black_losses") or 0),
     }
 
-
 @router.get("/games")
 def games(
     opening: str = "",
@@ -402,21 +698,31 @@ def games(
 ):
     try:
         if player1.strip() and not player2.strip() and not opening.strip():
-            _, variants = get_catalog_variants_for_name(player1)
+            master_object_key, master_updates_prefix, master_object_prefix, variants = get_catalog_master_scope(player1)
             query_params = bind_values("player", variants)
             where_clause = player_game_clause(variants)
+            if master_object_key:
+                query_params["master_object_key"] = master_object_key
+                query_params["master_player_slug"] = master_object_key.split("/")[-2]
+                query_params["master_object_prefix"] = master_object_prefix
+
+            source_table = "unique_master_games" if master_object_key else "imported_games"
+            source_prefix = unique_master_games_cte() if master_object_key else ""
+            source_where = "" if master_object_key else f"WHERE {where_clause}"
 
             total = int(db.execute(text(f"""
+                {source_prefix}
                 SELECT COUNT(*)
-                FROM imported_games
-                WHERE {where_clause}
+                FROM {source_table}
+                {source_where}
             """), query_params).scalar() or 0)
 
             rows = db.execute(text(f"""
+                {source_prefix}
                 SELECT id, event, site, game_date, round, white, black, white_elo, black_elo, result, eco, opening,
                        ply_count, source, pgn_object_key, moves
-                FROM imported_games
-                WHERE {where_clause}
+                FROM {source_table}
+                {source_where}
                 ORDER BY {get_games_order_sql(sort)}
                 LIMIT :limit OFFSET :offset
             """), {
@@ -433,6 +739,21 @@ def games(
             }
 
         query = db.query(models.ImportedGame)
+        master_object_key = None
+        if player1.strip():
+            master_object_key, _, master_object_prefix, _ = get_catalog_master_scope(player1)
+            if master_object_key:
+                master_player_slug = master_object_key.split("/")[-2]
+                query = query.filter(
+                    models.ImportedGame.id.in_(
+                        db.query(models.ImportedGamePlayerSource.game_id).filter(
+                            models.ImportedGamePlayerSource.player_slug == master_player_slug,
+                            models.ImportedGamePlayerSource.source == "chesscom-master",
+                        )
+                    ),
+                    models.ImportedGame.white != "Unknown",
+                    models.ImportedGame.black != "Unknown",
+                )
 
         if opening.strip():
             needle = f"%{opening.strip().lower()}%"
@@ -444,7 +765,13 @@ def games(
         p1 = player1.strip().lower()
         p2 = player2.strip().lower()
 
-        if p1 and p2:
+        if master_object_key and p2:
+            p2_like = f"%{p2}%"
+            query = query.filter(or_(
+                func.lower(models.ImportedGame.white).like(p2_like),
+                func.lower(models.ImportedGame.black).like(p2_like),
+            ))
+        elif p1 and p2:
             p1_like = f"%{p1}%"
             p2_like = f"%{p2}%"
             if fixed_colors:
@@ -463,7 +790,7 @@ def games(
                         func.lower(models.ImportedGame.black).like(p1_like)
                     ),
                 ))
-        elif p1:
+        elif p1 and not master_object_key:
             p1_like = f"%{p1}%"
             query = query.filter(or_(
                 func.lower(models.ImportedGame.white).like(p1_like),
@@ -574,23 +901,14 @@ def get_catalog_player_names():
 
 
 def get_best_players_of_all_time(db: Session):
-    all_aliases = sorted({alias for player in BEST_PLAYERS_OF_ALL_TIME for alias in player["aliases"]})
-    if not all_aliases:
-        return []
-
-    alias_params = {f"name_{index}": value for index, value in enumerate(all_aliases)}
-    placeholders = ", ".join(f":name_{index}" for index in range(len(all_aliases)))
-    rows = db.execute(text(f"""
-        SELECT lower(name) AS name, games
-        FROM imported_player_stats
-        WHERE lower(name) IN ({placeholders})
-    """), alias_params).all()
-    counts_by_alias = {row.name: int(row.games or 0) for row in rows}
-
+    names = [player["name"] for player in BEST_PLAYERS_OF_ALL_TIME]
+    rows = (
+        db.query(models.Player.name, models.Player.games)
+        .filter(models.Player.name.in_(names))
+        .all()
+    )
+    games_by_name = {row.name: int(row.games or 0) for row in rows}
     return [
-        {
-            "name": player["name"],
-            "games": sum(counts_by_alias.get(alias, 0) for alias in player["aliases"]),
-        }
+        {"name": player["name"], "games": games_by_name.get(player["name"], 0)}
         for player in BEST_PLAYERS_OF_ALL_TIME
     ]

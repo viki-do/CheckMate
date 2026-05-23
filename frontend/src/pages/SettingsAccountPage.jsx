@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { PiecePawn } from "../components/icons/Icons";
+import { PASSWORD_REQUIREMENTS_MESSAGE, passwordMeetsRequirements } from "../utils/passwordValidation";
 
 const API_BASE = "http://localhost:8000";
 
@@ -17,10 +18,6 @@ const sidebarItems = [
     { label: "Membership", icon: "fa-credit-card" },
     { label: "Accessibility", icon: "fa-universal-access" },
 ];
-
-const passwordMeetsRequirements = (value) => (
-    value.length >= 8 && /[A-Z]/.test(value) && /[0-9]/.test(value)
-);
 
 const PasswordField = ({ value, onChange, visible, onToggle, hasError = false }) => (
     <div className="relative w-[345px]">
@@ -114,7 +111,7 @@ const SettingsAccountPage = () => {
         if (!passwordMeetsRequirements(newPassword)) {
             setNotice({
                 type: "error",
-                text: "Password must be at least 8 characters and include one capital letter and one number.",
+                text: PASSWORD_REQUIREMENTS_MESSAGE,
                 fields: ["new"],
             });
             return;

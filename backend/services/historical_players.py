@@ -9,23 +9,51 @@ TRACKED_CHESSCOM_PLAYERS_FILE = Path(__file__).resolve().parents[1] / "data" / "
 
 MANUAL_ALIASES = {
     "Magnus Carlsen": ["magnuscarlsen", "carlsen m"],
-    "Hikaru Nakamura": ["hikaru", "nakamura h"],
+    "Hikaru Nakamura": ["hikaru", "gmhikaru", "gm hikaru", "nakamura h"],
     "Fabiano Caruana": ["fabianocaruana", "caruana f"],
+    "Anatoly Karpov": ["karpov ana"],
+    "Mikhail Botvinnik": ["botvinnik mikhail2"],
+    "Bobby Fischer": [
+        "robert james fischer",
+        "robert j fischer",
+        "robert fischer",
+        "fischer",
+        "fischer robert",
+        "fischer robert james",
+        "fischer robert j",
+        "fischer r j",
+        "fischer r",
+    ],
     "Alireza Firouzja": ["firouzja2003", "firouzja a"],
     "Wesley So": ["gmwso", "so w"],
     "Jan-Krzysztof Duda": ["polish_fighter3000", "polish fighter3000", "duda j"],
-    "Ian Nepomniachtchi": ["lachesisq", "nepomniachtchi i"],
+    "Ian Nepomniachtchi": ["lachesisq", "nepomniachtchi i", "nepomniashchij jan", "nepomnyashchiy yan"],
     "Nihal Sarin": ["junglebook1", "sarin n"],
     "Viswanathan Anand": ["vishy anand", "anand v"],
-    "Maxime Vachier-Lagrave": ["mvl", "vachier lagrave maxime"],
+    "Maxime Vachier-Lagrave": ["mvl", "vachier lagrave maxime", "lagrave maxime"],
     "Gukesh Dommaraju": ["gukesh d", "gukesh"],
     "Praggnanandhaa Rameshbabu": ["praggnanandhaa", "praggnanandhaa r"],
-    "Leinier Dominguez Perez": ["leinier dominguez", "dominguez leinier"],
+    "Leinier Dominguez Perez": [
+        "leinier dominguez",
+        "lenier dominguez",
+        "dominguez leinier",
+        "dominguez lenier",
+        "dominguez perez l",
+        "dominguez l",
+        "dominguezonyoutube",
+    ],
     "Le Quang Liem": ["liem le", "liem le quang"],
     "Yagiz Kaan Erdogmus": ["yagiz erdogmus", "erdogmus y"],
-    "Vidit Gujrathi": ["vidit", "vidit santosh gujrathi"],
+    "Vidit Gujrathi": ["vidit", "vidit s", "vidityt", "vidit santosh gujrathi"],
+    "Arjun Erigaisi": ["ghandeevam2003"],
     "Aravindh Chithambaram": ["aravindh", "aravindh chithambaram v r"],
-    "Harikrishna Pentala": ["harikrishna"],
+    "Harikrishna Pentala": ["harikrishna", "harikrishna p", "harikrishna pendyala", "pendyala harikrishna"],
+    "Pranav Venkatesh": ["pranav v", "v pranav"],
+    "Sam Sevian": ["samuel sevian", "sevian samuel"],
+    "Vladimir Fedoseev": ["fedoseev vl", "fedoseev vl1", "fedoseev vl3", "fedoseev vladimir1"],
+    "David Anton Guijarro": ["anton guijarro d", "anton guijarro david"],
+    "Amin Tabatabaei": ["tabatabaei m", "tabatabaei mohammad", "mohammad amin tabatabaei", "seyed mohammad amin tabatabaei"],
+    "Dmitry Andreikin": ["fairchess_on_youtube", "fairchess on youtube"],
     "Javokhir Sindarov": ["javokhir_sindarov05", "sindarovjr", "sindarovgm05", "sindarovgm2005"],
 }
 
@@ -66,6 +94,8 @@ def build_player_entries():
         if len(parts) >= 2:
             aliases.add(f"{parts[-1]} {' '.join(parts[:-1])}")
             aliases.add(f"{parts[-1]} {parts[0][0]}")
+            aliases.add(f"{parts[-1]} {parts[0][:2]}")
+            aliases.add(f"{parts[0]} {parts[-1][0]}")
         aliases.update(MANUAL_ALIASES.get(name, []))
         aliases.update(tracked_aliases.get(name, []))
         entries.append({

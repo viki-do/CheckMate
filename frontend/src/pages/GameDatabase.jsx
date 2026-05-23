@@ -21,6 +21,28 @@ const playerNameFromSlug = (slug) => String(slug || '')
   .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
   .join(' ');
 
+const scrollDatabaseToTop = () => {
+  requestAnimationFrame(() => {
+    document.querySelector('main')?.scrollTo({ top: 0, left: 0 });
+    window.scrollTo({ top: 0, left: 0 });
+  });
+};
+
+const scrollDatabaseToAllPlayers = () => {
+  requestAnimationFrame(() => {
+    const target = document.getElementById('all-players');
+    const scroller = document.querySelector('main');
+    if (!target || !scroller) return;
+
+    const scrollerTop = scroller.getBoundingClientRect().top;
+    const targetTop = target.getBoundingClientRect().top;
+    scroller.scrollTo({
+      top: scroller.scrollTop + targetTop - scrollerTop - 16,
+      left: 0,
+    });
+  });
+};
+
 const GameDatabase = () => {
   const navigate = useNavigate();
   const { playerSlug, gameId } = useParams();
@@ -78,8 +100,15 @@ const GameDatabase = () => {
     }
   }, [authHeaders, playerSearch, sortMode]);
 
-  const fetchGamesForPlayer = useCallback(async (player, page = 1, filters = DEFAULT_DETAIL_FILTERS, sort = 'year_desc') => {
+  const fetchGamesForPlayer = useCallback(async (player, page = 1, filters = DEFAULT_DETAIL_FILTERS, sort = 'year_desc', resetProfile = false) => {
     if (!player?.name) return;
+    setSelectedPlayer(player);
+    if (resetProfile) {
+      setPlayerProfile(null);
+      setTotalGames(0);
+    }
+    setGames([]);
+    setGamesPage(page);
     setIsGamesLoading(true);
     try {
       const params = new URLSearchParams({
@@ -96,8 +125,6 @@ const GameDatabase = () => {
         axios.get(`${API_BASE}/database/player-profile?name=${encodeURIComponent(player.name)}`, authHeaders),
         axios.get(`${API_BASE}/database/games?${params.toString()}`, authHeaders),
       ]);
-
-      setSelectedPlayer(player);
       setPlayerProfile(profileRes.data);
       setGames(gamesRes.data.games || []);
       setTotalGames(gamesRes.data.total || 0);
@@ -123,24 +150,32 @@ const GameDatabase = () => {
 
   useEffect(() => {
     let isMounted = true;
-    const load = async () => {
+    const loadSummary = async () => {
       setIsLoading(true);
       try {
-        const [summaryRes, playersRes] = await Promise.all([
-          axios.get(`${API_BASE}/database/summary`, authHeaders),
-          axios.get(`${API_BASE}/database/players?page=1&limit=${playersPageSize}&sort=name`, authHeaders),
-        ]);
-        if (!isMounted) return;
-        setSummary(summaryRes.data);
-        setPlayers(playersRes.data.players || []);
-        setPlayersTotal(playersRes.data.total || 0);
+        const summaryRes = await axios.get(`${API_BASE}/database/summary`, authHeaders);
+        if (isMounted) setSummary(summaryRes.data);
       } catch {
-        if (isMounted) setNotice('Could not load the cloud game database.');
+        if (isMounted) setNotice('Could not load the cloud game database summary.');
       } finally {
         if (isMounted) setIsLoading(false);
       }
     };
-    load();
+    const loadPlayers = async () => {
+      setIsPlayersLoading(true);
+      try {
+        const playersRes = await axios.get(`${API_BASE}/database/players?page=1&limit=${playersPageSize}&sort=name`, authHeaders);
+        if (!isMounted) return;
+        setPlayers(playersRes.data.players || []);
+        setPlayersTotal(playersRes.data.total || 0);
+      } catch {
+        if (isMounted) setNotice('Could not load the player catalogue.');
+      } finally {
+        if (isMounted) setIsPlayersLoading(false);
+      }
+    };
+    loadPlayers();
+    loadSummary();
     return () => { isMounted = false; };
   }, [authHeaders]);
 
@@ -154,7 +189,8 @@ const GameDatabase = () => {
 
     if (playerSlug) {
       const player = { name: playerNameFromSlug(playerSlug) };
-      fetchGamesForPlayer(player);
+      scrollDatabaseToTop();
+      fetchGamesForPlayer(player, 1, DEFAULT_DETAIL_FILTERS, 'year_desc', true);
       return;
     }
 
@@ -177,11 +213,13 @@ const GameDatabase = () => {
 
   const goToPlayersPage = async (nextPage) => {
     if (nextPage < 1 || nextPage > playersTotalPages || nextPage === playersPage) return;
+    scrollDatabaseToAllPlayers();
     await fetchPlayers(nextPage);
   };
 
   const goToGamesPage = async (nextPage) => {
     if (!selectedPlayer || nextPage < 1 || nextPage > gamesTotalPages || nextPage === gamesPage) return;
+    scrollDatabaseToTop();
     await fetchGamesForPlayer(selectedPlayer, nextPage, detailFilters, gamesSort);
   };
 
@@ -209,6 +247,7 @@ const GameDatabase = () => {
 
   const handleSelectPlayer = (player) => {
     if (!player?.name) return;
+    scrollDatabaseToTop();
     navigate(`/games/${toPlayerSlug(player.name)}`);
   };
 

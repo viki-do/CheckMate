@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Chess } from 'chess.js';
 import axios from 'axios';
-import { useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import AnalysisPanel from './AnalysisPanel';
 import { useChess } from '../context/ChessContext';
 import SetUpPositionView from './component_helpers/SetUpPositionView';
@@ -13,12 +13,94 @@ import AnalyzeEvalBar from './analyze-board/AnalyzeEvalBar';
 import NewAnalysisModal from './analyze-board/NewAnalysisModal';
 import SaveCollectionModal from './analyze-board/SaveCollectionModal';
 import SetupPieceDragPreview from './analyze-board/SetupPieceDragPreview';
+import { findBotByGameData } from './game-board/gameBoardUtils';
 import {
     DEFAULT_FEN,
     getResultLabel,
     getSandboxGameState,
 } from './analyze-board/analyzeBoardUtils';
 import { getHistoryNavigationSoundName } from '../hooks/chess-game/soundUtils';
+
+const COLLECTIONS_STORAGE_KEY = 'checkmate_game_collections';
+const SAVED_ANALYSES_STORAGE_KEY = 'checkmate_saved_analyses';
+const PUBLIC_ID_CHARS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+
+const createAnalysisSessionId = () => (
+    Array.from(crypto.getRandomValues(new Uint32Array(10)), (value) => PUBLIC_ID_CHARS[value % PUBLIC_ID_CHARS.length]).join('')
+);
+
+const extractPublicIdFromSlug = (slug) => String(slug || '').split('-').pop();
+
+const getCollectionGames = (collection) => (
+    Array.isArray(collection?.games) ? collection.games : []
+);
+
+const getGameSaveSignature = (history = [], startingFen = DEFAULT_FEN) => (
+    JSON.stringify({
+        startingFen,
+        moves: history.map((move) => move.m),
+        finalFen: history[history.length - 1]?.fen || startingFen,
+    })
+);
+
+const saveAnalysisGameToSavedList = (game) => {
+    if (!game?.id) return null;
+    try {
+        const savedAnalyses = JSON.parse(localStorage.getItem(SAVED_ANALYSES_STORAGE_KEY) || '[]');
+        const existingGame = savedAnalyses.find((savedGame) => String(savedGame.id) === String(game.id));
+        const nextGame = {
+            ...game,
+            addedAt: existingGame?.addedAt || game.addedAt || new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+        };
+        const nextSavedAnalyses = existingGame
+            ? savedAnalyses.map((savedGame) => String(savedGame.id) === String(game.id) ? nextGame : savedGame)
+            : [nextGame, ...savedAnalyses];
+
+        localStorage.setItem(SAVED_ANALYSES_STORAGE_KEY, JSON.stringify(nextSavedAnalyses));
+        return nextGame;
+    } catch {
+        return null;
+    }
+};
+
+const updateSavedAnalysisGame = (game) => {
+    if (!game?.id) return null;
+    try {
+        const collections = JSON.parse(localStorage.getItem(COLLECTIONS_STORAGE_KEY) || '[]');
+        let didUpdate = false;
+        let targetCollection = null;
+        const updatedCollections = collections.map((collection) => {
+            if (!Array.isArray(collection.games)) return collection;
+            let didUpdateCollection = false;
+            const games = collection.games.map((savedGame) => {
+                if (String(savedGame.id) !== String(game.id)) return savedGame;
+                didUpdate = true;
+                didUpdateCollection = true;
+                return {
+                    ...game,
+                    addedAt: savedGame.addedAt || game.addedAt,
+                    updatedAt: new Date().toISOString(),
+                };
+            });
+            if (!didUpdateCollection) return collection;
+            targetCollection = {
+                ...collection,
+                games,
+                gameCount: games.length,
+                updatedAt: new Date().toISOString(),
+            };
+            return targetCollection;
+        });
+        if (didUpdate) {
+            localStorage.setItem(COLLECTIONS_STORAGE_KEY, JSON.stringify(updatedCollections));
+        }
+        return targetCollection;
+    } catch {
+        // A broken local collection cache should not block analysis.
+        return null;
+    }
+};
 
 const parseMasterGameHistory = (game) => {
     let chess = new Chess();
@@ -56,9 +138,165 @@ const parseMasterGameHistory = (game) => {
     });
 };
 
+const formatToday = () => new Date().toISOString().slice(0, 10).replace(/-/g, '.');
+
+const buildSandboxMoves = (history) => (
+    history.map((move, index) => `${index % 2 === 0 ? `${Math.floor(index / 2) + 1}. ` : ''}${move.m}`).join(' ')
+);
+
+const getLatestHistoryFen = (history, fallbackFen) => (
+    history[history.length - 1]?.fen || fallbackFen
+);
+
+const normalizeSetupFen = (fen, turn = 'w') => {
+    const parts = String(fen || DEFAULT_FEN).trim().split(/\s+/);
+    if (parts.length < 4) return fen || DEFAULT_FEN;
+    while (parts.length < 6) {
+        parts.push(parts.length === 4 ? '0' : '1');
+    }
+    parts[1] = turn === 'b' ? 'b' : 'w';
+    parts[4] = '0';
+    parts[5] = '1';
+    return parts.join(' ');
+};
+
+const buildBotAnalysisGame = (data = {}, userAvatarSrc = '') => {
+    const bot = findBotByGameData(data);
+    const username = localStorage.getItem('chessUsername') || 'You';
+    const playerColor = String(data.player_color || 'white').toLowerCase();
+    const botName = bot?.name || 'Engine';
+    const botElo = data.bot_elo || bot?.elo || '';
+    const white = playerColor === 'white' ? username : botName;
+    const black = playerColor === 'black' ? username : botName;
+    const whiteAvatar = playerColor === 'white' ? userAvatarSrc : (bot?.img || '');
+    const blackAvatar = playerColor === 'black' ? userAvatarSrc : (bot?.img || '');
+
+    return {
+        id: data.game_id || '',
+        white,
+        black,
+        white_avatar: whiteAvatar,
+        black_avatar: blackAvatar,
+        white_elo: playerColor === 'white' ? '' : botElo,
+        black_elo: playerColor === 'black' ? '' : botElo,
+        result: data.result && data.result !== '*' ? data.result : '',
+        date: formatToday(),
+        event: 'Bot Game',
+        site: 'Checkmate',
+        opening: data.opening?.name || data.opening || '',
+        eco: data.opening?.eco || '',
+        moves: buildSandboxMoves((data.history || []).filter((move) => move?.m && move.m !== 'start')),
+        white_accuracy: data.white_accuracy,
+        black_accuracy: data.black_accuracy,
+    };
+};
+
+const normalizeBotHistory = (history = [], startingFen = DEFAULT_FEN) => {
+    const replay = new Chess(startingFen || DEFAULT_FEN);
+    return (history || [])
+        .filter((move) => move?.m && move.m !== 'start')
+        .map((move, index) => {
+            const fenBefore = replay.fen();
+            try {
+                replay.move(move.m);
+            } catch {
+                if (move.fen) {
+                    try {
+                        replay.load(move.fen);
+                    } catch {
+                        // Keep the previous board if a stored move is malformed.
+                    }
+                }
+            }
+            return {
+                ...move,
+                num: index,
+                fen_before: move.fen_before || fenBefore,
+                fen: move.fen || replay.fen(),
+                analysisLabel: move.analysisLabel?.toLowerCase?.() || move.analysisLabel || null,
+            };
+        });
+};
+
+const buildHistoryFromChess = (chess, startingFen = DEFAULT_FEN) => {
+    const replay = new Chess(startingFen);
+
+    return chess.history({ verbose: true }).map((move, index) => {
+        const fenBefore = replay.fen();
+        const replayMove = replay.move(move.san);
+        return {
+            num: index,
+            m: replayMove.san,
+            from: replayMove.from,
+            to: replayMove.to,
+            fen: replay.fen(),
+            fen_before: fenBefore,
+            color: replayMove.color,
+            analysisLabel: null,
+        };
+    });
+};
+
+const extractPgnResult = (text, metadata = {}) => (
+    (metadata.Result && metadata.Result !== '*')
+        ? metadata.Result
+        : (String(text || '').match(/(?:^|\s)(1-0|0-1|1\/2-1\/2)(?:\s|$)/)?.[1] || '')
+);
+
+const buildGameInfoFromMetadata = (metadata = {}, result = '') => ({
+    white: metadata.White || '',
+    black: metadata.Black || '',
+    result: result || (metadata.Result && metadata.Result !== '*' ? metadata.Result : ''),
+});
+
+const parseAnalysisInput = (value) => {
+    const text = String(value || '').trim();
+    if (!text) return null;
+
+    try {
+        const fenChess = new Chess(text);
+        return {
+            type: 'fen',
+            startingFen: fenChess.fen(),
+            history: [],
+            metadata: {},
+            result: '',
+        };
+    } catch {
+        // Not a FEN; try PGN next.
+    }
+
+    const chess = new Chess();
+    chess.loadPgn(text);
+    const metadata = chess.header();
+    const startingFen = metadata.FEN || DEFAULT_FEN;
+
+    return {
+        type: 'pgn',
+        startingFen,
+        history: buildHistoryFromChess(chess, startingFen),
+        metadata,
+        result: extractPgnResult(text, metadata),
+    };
+};
+
 const AnalyzeBoard = () => {
-    const { gameId: masterReviewGameId } = useParams();
+    const { gameId: masterReviewGameId, pgnGameId, botSelfAnalysisGameId, botReviewGameId, collectionSlug, collectionGameId, savedAnalysisId } = useParams();
+    const navigate = useNavigate();
+    const location = useLocation();
+    const [searchParams, setSearchParams] = useSearchParams();
     const isMasterReviewRoute = Boolean(masterReviewGameId);
+    const isPgnReviewRoute = Boolean(pgnGameId);
+    const isBotSelfAnalysisRoute = Boolean(botSelfAnalysisGameId);
+    const isBotReviewRoute = Boolean(botReviewGameId);
+    const botAnalysisGameId = botSelfAnalysisGameId || botReviewGameId;
+    const isSavedAnalysisRoute = Boolean(savedAnalysisId);
+    const isCollectionAnalysisRoute = Boolean(collectionSlug && collectionGameId);
+    const isAnalysisGamesRoute = location.pathname === '/analysis/games';
+    const isAnalysisExplorerRoute = location.pathname === '/analysis/explorer';
+    const isCollectionGamesRoute = isCollectionAnalysisRoute && location.pathname.endsWith('/games');
+    const isCollectionReviewRoute = isCollectionAnalysisRoute && location.pathname.endsWith('/review');
+    const isCollectionSettingsRoute = isCollectionAnalysisRoute && location.pathname.endsWith('/collection-settings');
     const chessContext = useChess();
     // --- ÁLLAPOTOK ---
     const [sandboxFen, setSandboxFen] = useState(DEFAULT_FEN);
@@ -79,10 +317,25 @@ const AnalyzeBoard = () => {
     const [initialAnalysis, setInitialAnalysis] = useState(null);
     const [sandboxStatus, setSandboxStatus] = useState('ongoing');
     const [sandboxStatusReason, setSandboxStatusReason] = useState('');
+    const [sandboxResult, setSandboxResult] = useState('');
+    const [sandboxGameInfo, setSandboxGameInfo] = useState(null);
     const [panelNotice, setPanelNotice] = useState('');
     const [selectedSetupPiece, setSelectedSetupPiece] = useState(null); // 'P', 'k', stb.
     const [masterReviewGame, setMasterReviewGame] = useState(null);
+    const [userAvatarUrl, setUserAvatarUrl] = useState('');
     const [masterReviewStarted, setMasterReviewStarted] = useState(false);
+    const [isSandboxReviewLocked, setIsSandboxReviewLocked] = useState(false);
+    const [isSandboxReviewComplete, setIsSandboxReviewComplete] = useState(false);
+    const [revealedBotAnalysisIndex, setRevealedBotAnalysisIndex] = useState(-1);
+    const [analysisSessionId, setAnalysisSessionId] = useState(createAnalysisSessionId);
+    const [collectionContext, setCollectionContext] = useState(null);
+    const [collectionSavedGame, setCollectionSavedGame] = useState(null);
+    const [lastSavedGameSignature, setLastSavedGameSignature] = useState(null);
+    const [analysisPanelTab, setAnalysisPanelTab] = useState(isAnalysisExplorerRoute ? 'explore' : 'analysis');
+    const [hasLoadedSetupPosition, setHasLoadedSetupPosition] = useState(false);
+    const [setupTurn, setSetupTurn] = useState('w');
+    const autoStartedBotReviewRef = useRef(null);
+    const autoStartedMasterReviewRef = useRef(null);
     
 
     const {
@@ -91,11 +344,39 @@ const AnalyzeBoard = () => {
         token, playSound, setMousePos, setDragOffset, 
         setHoverSquare, hoverSquare, mousePos
     } = chessContext;
+    const userAvatarSrc = userAvatarUrl
+        ? (String(userAvatarUrl).startsWith('http') ? userAvatarUrl : `${API_BASE}${userAvatarUrl}`)
+        : '';
+
+    useEffect(() => {
+        if (!token || !API_BASE) return;
+
+        let isMounted = true;
+        axios.get(`${API_BASE}/profile`, {
+            headers: { Authorization: `Bearer ${token}` },
+        }).then((res) => {
+            if (isMounted) setUserAvatarUrl(res.data.avatar_url || '');
+        }).catch(() => {});
+
+        const handleAvatarUpdated = (event) => {
+            setUserAvatarUrl(event.detail?.avatarUrl || '');
+        };
+        window.addEventListener('profile-avatar-updated', handleAvatarUpdated);
+
+        return () => {
+            isMounted = false;
+            window.removeEventListener('profile-avatar-updated', handleAvatarUpdated);
+        };
+    }, [API_BASE, token]);
 
     // --- PERSISTENCE ---
     
     useEffect(() => {
-    if (isMasterReviewRoute) return;
+    if (isMasterReviewRoute || isCollectionAnalysisRoute || isSavedAnalysisRoute || isBotSelfAnalysisRoute || isBotReviewRoute) return;
+    if (location.pathname === '/analysis' && !location.search) {
+        localStorage.removeItem('chess_analysis_cache');
+        return;
+    }
     const saved = localStorage.getItem('chess_analysis_cache');
     if (saved) {
         try {
@@ -107,7 +388,13 @@ const AnalyzeBoard = () => {
             if (data.lastMove) setSandboxLastMove(data.lastMove);
             if (data.opening) setOpeningName(data.opening);
             if (data.initialAnalysis) setInitialAnalysis(data.initialAnalysis);
+            if (data.sandboxResult) setSandboxResult(data.sandboxResult);
+            if (data.sandboxGameInfo) setSandboxGameInfo(data.sandboxGameInfo);
             if (data.panelNotice) setPanelNotice(data.panelNotice);
+            if (data.isSandboxReviewComplete) setIsSandboxReviewComplete(true);
+            if (data.masterReviewStarted) setMasterReviewStarted(true);
+            if (data.analysisSessionId) setAnalysisSessionId(data.analysisSessionId);
+            if (data.hasLoadedSetupPosition) setHasLoadedSetupPosition(true);
 
             if (data.startingFen) {
                 setSandboxStartingFen(data.startingFen);
@@ -120,7 +407,138 @@ const AnalyzeBoard = () => {
             console.error("Hiba a cache betöltésekor:", e);
         }
     }
-}, [isMasterReviewRoute]); 
+    }, [isMasterReviewRoute, isCollectionAnalysisRoute, isSavedAnalysisRoute, isBotSelfAnalysisRoute, isBotReviewRoute]); 
+
+    useEffect(() => {
+        setAnalysisPanelTab(isAnalysisExplorerRoute ? 'explore' : 'analysis');
+    }, [isAnalysisExplorerRoute]);
+
+    useEffect(() => {
+        if (!isCollectionAnalysisRoute) return;
+        const decodedGameId = decodeURIComponent(collectionGameId);
+        const moveParam = searchParams.get('move');
+        const requestedMoveIndex = moveParam === null ? null : Number.parseInt(moveParam, 10);
+
+        if (String(analysisSessionId) === String(decodedGameId) && sandboxHistory.length > 0) {
+            if (moveParam === null) {
+                setSandboxFen(sandboxStartingFen || DEFAULT_FEN);
+                setSandboxLastMove({ from: null, to: null });
+                setViewIndex(-2);
+                return;
+            }
+            const hasValidMoveIndex = Number.isInteger(requestedMoveIndex) && requestedMoveIndex >= 0 && requestedMoveIndex < sandboxHistory.length;
+            const displayedMove = hasValidMoveIndex ? sandboxHistory[requestedMoveIndex] : null;
+            setSandboxFen(displayedMove?.fen || DEFAULT_FEN);
+            setSandboxLastMove(displayedMove ? { from: displayedMove.from, to: displayedMove.to } : { from: null, to: null });
+            setViewIndex(hasValidMoveIndex ? requestedMoveIndex : -2);
+            return;
+        }
+
+        try {
+            const collections = JSON.parse(localStorage.getItem(COLLECTIONS_STORAGE_KEY) || '[]');
+            const publicId = extractPublicIdFromSlug(collectionSlug);
+            const collection = collections.find((item) => item.publicId === publicId || getCollectionGames(item).some((game) => String(game.id) === String(decodedGameId)));
+            const game = getCollectionGames(collection).find((item) => String(item.id) === String(decodedGameId));
+            if (!game) {
+                setPanelNotice('Could not load this collection game.');
+                return;
+            }
+
+            const startingFen = game.startingFen || DEFAULT_FEN;
+            const rawHistory = Array.isArray(game.analysisHistory) && game.analysisHistory.length
+                ? game.analysisHistory
+                : parseMasterGameHistory(game);
+            const parsedHistory = normalizeBotHistory(rawHistory, startingFen);
+            const hasValidMoveIndex = Number.isInteger(requestedMoveIndex) && requestedMoveIndex >= 0 && requestedMoveIndex < parsedHistory.length;
+            const displayedMove = hasValidMoveIndex ? parsedHistory[requestedMoveIndex] : null;
+            const isFinishedSavedGame = Boolean(game.result && game.result !== '*');
+            setCollectionContext({
+                id: collection?.id || '',
+                name: collection?.name || 'Collection',
+                ownerName: collection?.ownerName || '',
+                privacy: collection?.privacy || 'private',
+                createdAt: collection?.createdAt || '',
+                updatedAt: collection?.updatedAt || collection?.createdAt || '',
+            });
+                setCollectionSavedGame(game);
+                setHasLoadedSetupPosition(Boolean(game.startingFen && game.startingFen !== DEFAULT_FEN && parsedHistory.length === 0));
+            setLastSavedGameSignature(getGameSaveSignature(parsedHistory, startingFen));
+            setMasterReviewGame(null);
+            setMasterReviewStarted(isFinishedSavedGame);
+            setIsSandboxReviewComplete(isFinishedSavedGame);
+            setIsSandboxReviewLocked(isFinishedSavedGame);
+            setAnalysisSessionId(String(game.id));
+            setSandboxStartingFen(startingFen);
+            setSandboxHistory(parsedHistory);
+            setSandboxFen(displayedMove?.fen || startingFen);
+            setSandboxLastMove(displayedMove ? { from: displayedMove.from, to: displayedMove.to } : { from: null, to: null });
+            setViewIndex(hasValidMoveIndex ? requestedMoveIndex : -2);
+            setOpeningName(game.opening || '');
+            setInitialAnalysis(game.initialAnalysis || null);
+            setSandboxResult(game.result && game.result !== '*' ? game.result : '');
+            setSandboxGameInfo({
+                white: game.white || '',
+                black: game.black || '',
+                result: game.result && game.result !== '*' ? game.result : '',
+            });
+            setPanelNotice('');
+            setRightPanelMode('analysis');
+        } catch (err) {
+            console.error('Collection analysis load failed:', err);
+            setPanelNotice('Could not load this collection game.');
+        }
+    }, [isCollectionAnalysisRoute, isCollectionGamesRoute, collectionSlug, collectionGameId, searchParams]);
+
+    useEffect(() => {
+        if (!isSavedAnalysisRoute || !savedAnalysisId) return;
+        const decodedGameId = decodeURIComponent(savedAnalysisId);
+        const moveParam = searchParams.get('move');
+        const requestedMoveIndex = moveParam === null ? null : Number.parseInt(moveParam, 10);
+
+        try {
+            const savedAnalyses = JSON.parse(localStorage.getItem(SAVED_ANALYSES_STORAGE_KEY) || '[]');
+            const game = savedAnalyses.find((item) => String(item.id) === String(decodedGameId));
+            if (!game) {
+                setPanelNotice('Could not load this saved analysis.');
+                return;
+            }
+
+            const parsedHistory = Array.isArray(game.analysisHistory) && game.analysisHistory.length
+                ? game.analysisHistory
+                : parseMasterGameHistory(game);
+            const startingFen = game.startingFen || DEFAULT_FEN;
+            const hasValidMoveIndex = Number.isInteger(requestedMoveIndex) && requestedMoveIndex >= 0 && requestedMoveIndex < parsedHistory.length;
+            const displayedMove = hasValidMoveIndex ? parsedHistory[requestedMoveIndex] : null;
+
+            setCollectionContext(null);
+            setCollectionSavedGame(game);
+            setHasLoadedSetupPosition(Boolean(game.startingFen && game.startingFen !== DEFAULT_FEN && parsedHistory.length === 0));
+            setLastSavedGameSignature(getGameSaveSignature(parsedHistory, startingFen));
+            setMasterReviewGame(null);
+            setMasterReviewStarted(Boolean(game.analysisHistory?.length));
+            setIsSandboxReviewComplete(Boolean(game.analysisHistory?.length));
+            setIsSandboxReviewLocked(Boolean(game.analysisHistory?.length));
+            setAnalysisSessionId(String(game.id));
+            setSandboxStartingFen(startingFen);
+            setSandboxHistory(parsedHistory);
+            setSandboxFen(displayedMove?.fen || startingFen);
+            setSandboxLastMove(displayedMove ? { from: displayedMove.from, to: displayedMove.to } : { from: null, to: null });
+            setViewIndex(hasValidMoveIndex ? requestedMoveIndex : -2);
+            setOpeningName(game.opening || '');
+            setInitialAnalysis(game.initialAnalysis || null);
+            setSandboxResult(game.result && game.result !== '*' ? game.result : '');
+            setSandboxGameInfo(game.gameInfo || {
+                white: game.white || '',
+                black: game.black || '',
+                result: game.result && game.result !== '*' ? game.result : '',
+            });
+            setPanelNotice('');
+            setRightPanelMode('analysis');
+        } catch (err) {
+            console.error('Saved analysis load failed:', err);
+            setPanelNotice('Could not load this saved analysis.');
+        }
+    }, [isSavedAnalysisRoute, savedAnalysisId, searchParams]);
 
     useEffect(() => {
         if (!isMasterReviewRoute || !masterReviewGameId || !API_BASE) return;
@@ -130,6 +548,9 @@ const AnalyzeBoard = () => {
             setIsAnalyzing(true);
             setPanelNotice('');
             setMasterReviewStarted(false);
+            setIsSandboxReviewComplete(false);
+            setIsSandboxReviewLocked(false);
+            setRevealedBotAnalysisIndex(-1);
             try {
                 const res = await axios.get(`${API_BASE}/database/games/${masterReviewGameId}`, {
                     headers: { Authorization: `Bearer ${token}` }
@@ -149,6 +570,12 @@ const AnalyzeBoard = () => {
                 setViewIndex(-1);
                 setOpeningName(detectedOpening);
                 setInitialAnalysis(null);
+                setSandboxResult(game.result && game.result !== '*' ? game.result : '');
+                setSandboxGameInfo({
+                    white: game.white || '',
+                    black: game.black || '',
+                    result: game.result && game.result !== '*' ? game.result : '',
+                });
                 setRightPanelMode('analysis');
             } catch (err) {
                 console.error("Master review game load failed:", err);
@@ -163,7 +590,143 @@ const AnalyzeBoard = () => {
     }, [isMasterReviewRoute, masterReviewGameId, API_BASE, token]);
 
     useEffect(() => {
-        if (isMasterReviewRoute) return;
+        if ((!isBotSelfAnalysisRoute && !isBotReviewRoute) || !botAnalysisGameId || !API_BASE) return;
+
+        let isMounted = true;
+        const loadBotGame = async () => {
+            if (isBotSelfAnalysisRoute) setIsAnalyzing(true);
+            setPanelNotice('');
+            setMasterReviewStarted(false);
+            setIsSandboxReviewComplete(false);
+            setIsSandboxReviewLocked(false);
+            try {
+                const res = await axios.get(`${API_BASE}/game/${botAnalysisGameId}/history`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+                if (!isMounted) return;
+
+                const data = { ...res.data, game_id: botAnalysisGameId };
+                const parsedHistory = normalizeBotHistory(data.history || []);
+                const botGame = buildBotAnalysisGame(data, userAvatarSrc);
+                const latestMove = parsedHistory[parsedHistory.length - 1];
+                const shouldOpenLatestMove = false;
+                const sandboxLikeHistory = isBotSelfAnalysisRoute
+                    ? parsedHistory.map((move) => ({
+                        ...move,
+                        analysisLabel: null,
+                        eval: undefined,
+                        rawEval: undefined,
+                        bestMove: undefined,
+                        bestMoveUci: undefined,
+                        bestEval: undefined,
+                        rawBestEval: undefined,
+                        evalLoss: undefined,
+                        winChanceLoss: undefined,
+                        engineLines: [],
+                        bestEngineLines: [],
+                        analysisPending: false,
+                        analysisFailed: false,
+                    }))
+                    : parsedHistory;
+
+                setMasterReviewGame(isBotSelfAnalysisRoute ? null : botGame);
+                setSandboxStartingFen(DEFAULT_FEN);
+                setSandboxHistory(sandboxLikeHistory);
+                setSandboxFen(shouldOpenLatestMove ? latestMove.fen : DEFAULT_FEN);
+                setSandboxLastMove(shouldOpenLatestMove ? { from: latestMove.from, to: latestMove.to } : { from: null, to: null });
+                setViewIndex(shouldOpenLatestMove ? sandboxLikeHistory.length - 1 : -2);
+                setOpeningName(botGame.opening || '');
+                setInitialAnalysis(null);
+                setSandboxResult(botGame.result || '');
+                setSandboxGameInfo({
+                    white: botGame.white,
+                    black: botGame.black,
+                    white_avatar: botGame.white_avatar,
+                    black_avatar: botGame.black_avatar,
+                    result: botGame.result || '',
+                });
+                setRightPanelMode('analysis');
+
+                if (isBotSelfAnalysisRoute && sandboxLikeHistory.length > 0) {
+                    const startRes = await axios.post(`${API_BASE}/analyze-sandbox-move`, {
+                        fen_before: DEFAULT_FEN,
+                        move: null,
+                        prev_eval: 0,
+                    }, {
+                        headers: { Authorization: `Bearer ${token}` },
+                    });
+
+                    if (!isMounted) return;
+                    const startRawEval = Number(startRes.data?.eval);
+                    setInitialAnalysis({
+                        eval: Number.isFinite(startRawEval) ? startRawEval / 100 : 0,
+                        engineLines: startRes.data?.engine_lines || [],
+                    });
+                    if (startRes.data?.opening) {
+                        setOpeningName(typeof startRes.data.opening === 'object'
+                            ? startRes.data.opening.name
+                            : startRes.data.opening);
+                    }
+
+                    let prevEval = 30;
+                    const analyzedHistory = [];
+
+                    for (const move of sandboxLikeHistory) {
+                        const moveRes = await axios.post(`${API_BASE}/analyze-sandbox-move`, {
+                            fen_before: move.fen_before,
+                            move: move.m,
+                            prev_eval: prevEval,
+                        }, {
+                            headers: { Authorization: `Bearer ${token}` },
+                        });
+
+                        if (!isMounted) return;
+                        const rawEval = Number(moveRes.data?.eval);
+                        prevEval = Number.isFinite(rawEval) ? rawEval : prevEval;
+
+                        analyzedHistory.push({
+                            ...move,
+                            analysisLabel: moveRes.data?.label?.toLowerCase(),
+                            eval: Number.isFinite(rawEval) ? rawEval / 100 : move.eval,
+                            rawEval,
+                            bestMove: moveRes.data?.best_move,
+                            bestMoveUci: moveRes.data?.best_move_uci,
+                            bestEval: moveRes.data?.best_eval,
+                            rawBestEval: moveRes.data?.raw_best_eval,
+                            evalLoss: moveRes.data?.eval_loss,
+                            winChanceLoss: moveRes.data?.win_chance_loss,
+                            engineLines: moveRes.data?.engine_lines || [],
+                            bestEngineLines: moveRes.data?.best_engine_lines || [],
+                            analysisPending: false,
+                            analysisFailed: false,
+                        });
+
+                        if (moveRes.data?.opening) {
+                            setOpeningName(typeof moveRes.data.opening === 'object'
+                                ? moveRes.data.opening.name
+                                : moveRes.data.opening);
+                        }
+                    }
+
+                    setSandboxHistory(analyzedHistory);
+                    setSandboxFen(DEFAULT_FEN);
+                    setSandboxLastMove({ from: null, to: null });
+                    setViewIndex(-2);
+                }
+            } catch (err) {
+                console.error("Bot analysis game load failed:", err);
+                if (isMounted) setPanelNotice('Could not load this bot game.');
+            } finally {
+                if (isMounted && isBotSelfAnalysisRoute) setIsAnalyzing(false);
+            }
+        };
+
+        loadBotGame();
+        return () => { isMounted = false; };
+    }, [isBotSelfAnalysisRoute, isBotReviewRoute, botAnalysisGameId, API_BASE, token, userAvatarSrc]);
+
+    useEffect(() => {
+        if (isMasterReviewRoute || isCollectionAnalysisRoute || isSavedAnalysisRoute || isPgnReviewRoute || isBotSelfAnalysisRoute || isBotReviewRoute) return;
         const cache = { 
             fen: sandboxFen, 
             history: sandboxHistory, 
@@ -171,16 +734,198 @@ const AnalyzeBoard = () => {
             opening: openingName, 
             startingFen: sandboxStartingFen,
             initialAnalysis,
-            panelNotice
+            sandboxResult,
+            sandboxGameInfo,
+            panelNotice,
+            isSandboxReviewComplete,
+            masterReviewStarted,
+            analysisSessionId,
+            hasLoadedSetupPosition,
         };
         localStorage.setItem('chess_analysis_cache', JSON.stringify(cache));
-    }, [isMasterReviewRoute, sandboxFen, sandboxHistory, sandboxLastMove, openingName, sandboxStartingFen, initialAnalysis, panelNotice]);
+    }, [isMasterReviewRoute, isCollectionAnalysisRoute, isSavedAnalysisRoute, isPgnReviewRoute, isBotSelfAnalysisRoute, isBotReviewRoute, sandboxFen, sandboxHistory, sandboxLastMove, openingName, sandboxStartingFen, initialAnalysis, sandboxResult, sandboxGameInfo, panelNotice, isSandboxReviewComplete, masterReviewStarted, analysisSessionId, hasLoadedSetupPosition]);
+
+    useEffect(() => {
+        if (!isPgnReviewRoute || sandboxHistory.length === 0) return;
+        const moveParam = searchParams.get('move');
+        if (moveParam === null) {
+            if (!masterReviewStarted) {
+                setSandboxFen(sandboxStartingFen || DEFAULT_FEN);
+                setSandboxLastMove({ from: null, to: null });
+                setViewIndex(-2);
+            }
+            return;
+        }
+        const requestedMoveIndex = Number.parseInt(moveParam, 10);
+        if (!Number.isInteger(requestedMoveIndex) || requestedMoveIndex < 0 || requestedMoveIndex >= sandboxHistory.length) return;
+        const move = sandboxHistory[requestedMoveIndex];
+        setSandboxFen(move.fen);
+        setSandboxLastMove({ from: move.from, to: move.to });
+        setViewIndex(requestedMoveIndex);
+    }, [isPgnReviewRoute, searchParams, sandboxHistory, masterReviewStarted, sandboxStartingFen]);
 
     useEffect(() => {
         const { status, reason } = getSandboxGameState(sandboxFen);
         setSandboxStatus(status);
         setSandboxStatusReason(reason);
     }, [sandboxFen]);
+
+    useEffect(() => {
+        if (!isCollectionAnalysisRoute || viewIndex < 0 || !API_BASE || !token) return;
+        const move = sandboxHistory[viewIndex];
+        if (!move || move.analysisLabel || move.engineLines?.length || move.engine_lines?.length) return;
+
+        let isMounted = true;
+        const analyzeMissingCollectionMove = async () => {
+            try {
+                const prevEval = viewIndex > 0 ? (sandboxHistory[viewIndex - 1].rawEval || 0) : 0;
+                const res = await axios.post(`${API_BASE}/analyze-sandbox-move`, {
+                    fen_before: move.fen_before,
+                    move: move.m,
+                    prev_eval: prevEval,
+                }, { headers: { Authorization: `Bearer ${token}` } });
+
+                if (!isMounted) return;
+                setSandboxHistory((prev) => prev.map((item, index) => (
+                    index === viewIndex ? {
+                        ...item,
+                        analysisLabel: res.data.label?.toLowerCase(),
+                        eval: res.data.eval / 100,
+                        rawEval: res.data.eval,
+                        bestMove: res.data.best_move,
+                        bestMoveUci: res.data.best_move_uci,
+                        bestEval: res.data.best_eval,
+                        rawBestEval: res.data.raw_best_eval,
+                        evalLoss: res.data.eval_loss,
+                        winChanceLoss: res.data.win_chance_loss,
+                        engineLines: res.data.engine_lines || [],
+                        bestEngineLines: res.data.best_engine_lines || [],
+                    } : item
+                )));
+
+                if (res.data.opening) {
+                    setOpeningName(typeof res.data.opening === 'object' ? res.data.opening.name : res.data.opening);
+                }
+            } catch (err) {
+                console.error('Collection move analysis failed:', err);
+            }
+        };
+
+        analyzeMissingCollectionMove();
+        return () => { isMounted = false; };
+    }, [isCollectionAnalysisRoute, viewIndex, sandboxHistory, API_BASE, token]);
+
+    useEffect(() => {
+        if (!isCollectionAnalysisRoute || viewIndex > -2 || initialAnalysis || !API_BASE || !token) return;
+
+        let isMounted = true;
+        const analyzeCollectionStartingPosition = async () => {
+            try {
+                const startFen = sandboxStartingFen || DEFAULT_FEN;
+                const res = await axios.post(`${API_BASE}/analyze-sandbox-move`, {
+                    fen_before: startFen,
+                    move: null,
+                    prev_eval: 0,
+                }, { headers: { Authorization: `Bearer ${token}` } });
+
+                if (!isMounted) return;
+                const rawEval = Number(res.data?.eval);
+                const nextInitialAnalysis = {
+                    eval: Number.isFinite(rawEval) ? rawEval / 100 : 0,
+                    engineLines: res.data?.engine_lines || [],
+                };
+                setInitialAnalysis(nextInitialAnalysis);
+
+                if (res.data?.opening && !openingName) {
+                    setOpeningName(typeof res.data.opening === 'object' ? res.data.opening.name : res.data.opening);
+                }
+
+                if (collectionSavedGame?.id) {
+                    const updatedGame = {
+                        ...collectionSavedGame,
+                        initialAnalysis: nextInitialAnalysis,
+                    };
+                    updateSavedAnalysisGame(updatedGame);
+                    setCollectionSavedGame(updatedGame);
+                }
+            } catch (err) {
+                console.error('Collection starting position analysis failed:', err);
+            }
+        };
+
+        analyzeCollectionStartingPosition();
+        return () => { isMounted = false; };
+    }, [isCollectionAnalysisRoute, viewIndex, initialAnalysis, API_BASE, token, sandboxStartingFen, collectionSavedGame, openingName]);
+
+    useEffect(() => {
+        if (isMasterReviewRoute || isCollectionAnalysisRoute || !API_BASE || !token || isAnalyzing) return;
+        if (!sandboxHistory.length) return;
+
+        const targetIndex = viewIndex >= 0 ? viewIndex : sandboxHistory.length - 1;
+        const move = sandboxHistory[targetIndex];
+        const hasEngineLines = Boolean(move?.engineLines?.length || move?.engine_lines?.length);
+        const hasFullMoveAnalysis = hasEngineLines && Boolean(move?.analysisLabel || move?.bestMove || move?.bestMoveUci);
+        if (
+            !move ||
+            hasFullMoveAnalysis ||
+            move.analysisPending ||
+            move.analysisFailed
+        ) {
+            return;
+        }
+
+        let isMounted = true;
+        setSandboxHistory((prev) => prev.map((item, index) => (
+            index === targetIndex ? { ...item, analysisPending: true } : item
+        )));
+
+        const analyzeMissingSandboxMove = async () => {
+            setIsAnalyzing(true);
+            try {
+                const prevEval = targetIndex > 0 ? (sandboxHistory[targetIndex - 1].rawEval || 0) : 0;
+                const res = await axios.post(`${API_BASE}/analyze-sandbox-move`, {
+                    fen_before: move.fen_before,
+                    move: move.m,
+                    prev_eval: prevEval,
+                }, { headers: { Authorization: `Bearer ${token}` } });
+
+                if (!isMounted) return;
+                setSandboxHistory((prev) => prev.map((item, index) => (
+                    index === targetIndex ? {
+                        ...item,
+                        analysisPending: false,
+                        analysisLabel: res.data.label?.toLowerCase(),
+                        eval: res.data.eval / 100,
+                        rawEval: res.data.eval,
+                        bestMove: res.data.best_move,
+                        bestMoveUci: res.data.best_move_uci,
+                        bestEval: res.data.best_eval,
+                        rawBestEval: res.data.raw_best_eval,
+                        evalLoss: res.data.eval_loss,
+                        winChanceLoss: res.data.win_chance_loss,
+                        engineLines: res.data.engine_lines || [],
+                        bestEngineLines: res.data.best_engine_lines || [],
+                    } : item
+                )));
+
+                if (res.data.opening) {
+                    setOpeningName(typeof res.data.opening === 'object' ? res.data.opening.name : res.data.opening);
+                }
+            } catch (err) {
+                console.error('Sandbox cached move analysis failed:', err);
+                if (isMounted) {
+                    setSandboxHistory((prev) => prev.map((item, index) => (
+                        index === targetIndex ? { ...item, analysisPending: false, analysisFailed: true } : item
+                    )));
+                }
+            } finally {
+                if (isMounted) setIsAnalyzing(false);
+            }
+        };
+
+        analyzeMissingSandboxMove();
+        return () => { isMounted = false; };
+    }, [isMasterReviewRoute, isCollectionAnalysisRoute, viewIndex, sandboxHistory, API_BASE, token, isAnalyzing]);
 
 
 
@@ -206,11 +951,11 @@ const AnalyzeBoard = () => {
 
     // --- LÉPÉS VÉGREHAJTÁS ---
     const executeAnalysisMove = async (from, to, promotion = null) => {
-    if (sandboxStatus !== 'ongoing') {
+    if (sandboxStatus !== 'ongoing' || isSandboxReviewLocked || isSandboxReviewComplete) {
         return;
     }
 
-    if (viewIndex !== -1) {
+    if (viewIndex !== -1 && !(viewIndex <= -2 && sandboxHistory.length === 0)) {
         const latest = sandboxHistory[sandboxHistory.length - 1];
         if (latest) {
             setSandboxFen(latest.fen);
@@ -218,6 +963,9 @@ const AnalyzeBoard = () => {
         }
         setViewIndex(-1);
         return; 
+    }
+    if (viewIndex <= -2 && sandboxHistory.length === 0) {
+        setViewIndex(-1);
     }
 
     setSelectedSquare(null);
@@ -242,6 +990,16 @@ const AnalyzeBoard = () => {
     setSandboxLastMove({ from, to });
     setPendingPromotion(null);
     setPanelNotice('');
+    setSandboxResult('');
+    setSandboxGameInfo(null);
+    if (isCollectionGamesRoute) {
+        navigate(`/analysis/collection/${collectionSlug}/${encodeURIComponent(collectionGameId)}/analysis`, { replace: true });
+    } else if (isAnalysisGamesRoute) {
+        navigate('/analysis', { replace: true });
+    }
+    setIsSandboxReviewComplete(false);
+    setIsSandboxReviewLocked(false);
+    setMasterReviewStarted(false);
 
     // JAVÍTÁS: Hozzáadjuk a fen_before mezőt a mentett lépéshez
     const tempMove = {
@@ -250,10 +1008,14 @@ const AnalyzeBoard = () => {
         from, to,
         fen: newFen,
         fen_before: fenBefore, // <--- EZT HIÁNYOLTA AZ ANALYSISPANEL
-        analysisLabel: null 
+        analysisLabel: null,
+        analysisPending: true,
     };
     
     setSandboxHistory(prev => [...prev, tempMove]);
+    if (isCollectionAnalysisRoute && !isCollectionReviewRoute) {
+        setSearchParams({ move: String(sandboxHistory.length) }, { replace: true });
+    }
     playSound(moveAttempt.captured ? 'capture' : 'move');
 
     setIsAnalyzing(true);
@@ -271,6 +1033,7 @@ const AnalyzeBoard = () => {
         setSandboxHistory(prev => prev.map((h, i) => 
             i === prev.length - 1 ? {
                 ...h,
+                analysisPending: false,
                 analysisLabel: res.data.label?.toLowerCase(),
                 eval: res.data.eval / 100,
                 rawEval: res.data.eval,
@@ -280,7 +1043,8 @@ const AnalyzeBoard = () => {
                 rawBestEval: res.data.raw_best_eval,
                 evalLoss: res.data.eval_loss,
                 winChanceLoss: res.data.win_chance_loss,
-                engineLines: res.data.engine_lines || [] 
+                engineLines: res.data.engine_lines || [],
+                bestEngineLines: res.data.best_engine_lines || [],
             } : h
         ));
 
@@ -292,20 +1056,49 @@ const AnalyzeBoard = () => {
         }
     } catch (err) {
         console.error("Analysis error:", err);
+        setSandboxHistory(prev => prev.map((h, i) => (
+            i === prev.length - 1 ? { ...h, analysisPending: false, analysisFailed: true } : h
+        )));
     } finally { 
         setIsAnalyzing(false); 
     }
 };
 
-const handleFullReview = async () => {
+const buildCurrentSandboxSavedGame = (id, history = sandboxHistory, overrides = {}) => ({
+    id,
+    source: 'analysis',
+    white: sandboxGameInfo?.white || 'White',
+    black: sandboxGameInfo?.black || 'Black',
+    result: sandboxResult || sandboxGameInfo?.result || '*',
+    date: sandboxGameInfo?.date || formatToday(),
+    event: 'Game Review, Analysis',
+    site: sandboxGameInfo?.site || 'Checkmate Analysis',
+    opening: openingName || sandboxGameInfo?.opening || '',
+    eco: sandboxGameInfo?.eco || '',
+    moves: buildSandboxMoves(history),
+    analysisHistory: history,
+    fen: getLatestHistoryFen(history, sandboxFen),
+    startingFen: sandboxStartingFen,
+    initialAnalysis,
+    gameInfo: sandboxGameInfo,
+    addedAt: new Date().toISOString(),
+    ...overrides,
+});
+
+const handleFullReview = async ({ stayOnIntro = false } = {}) => {
     console.log("--- DEBUG: Full Review Folyamat Elindult ---");
+    const isStoredBotReview = isBotReviewRoute && botReviewGameId;
+    const isStoredMasterReview = isMasterReviewRoute && masterReviewGameId;
     
     // 1. Ellenőrizzük, van-e egyáltalán mit elemezni
-    if (sandboxHistory.length === 0) {
+    if (sandboxHistory.length === 0 && !isStoredBotReview) {
         console.warn("STOP: A sandboxHistory üres, nincs mit elemezni.");
+        setPanelNotice('No moves available to review.');
         return;
     }
 
+    setIsSandboxReviewLocked(true);
+    setIsSandboxReviewComplete(false);
     setIsAnalyzing(true);
 
     try {
@@ -322,21 +1115,39 @@ const handleFullReview = async () => {
         });
 
 
-        console.log("2. API hívás indítása: /analyze-full-game-sandbox");
-        const res = await axios.post(`${API_BASE}/analyze-full-game-sandbox`, { 
-            moves: moveList,
-            initial_fen: sandboxStartingFen 
-        }, { 
-            headers: { Authorization: `Bearer ${token}` } 
-        });
+        console.log("2. API hívás indítása:", isStoredBotReview ? `/analyze-full-game/${botReviewGameId}` : "/analyze-full-game-sandbox");
+        const res = isStoredBotReview
+            ? await axios.post(`${API_BASE}/analyze-full-game/${botReviewGameId}`, {}, {
+                headers: { Authorization: `Bearer ${token}` },
+            })
+            : await axios.post(`${API_BASE}/analyze-full-game-sandbox`, {
+                moves: moveList,
+                initial_fen: sandboxStartingFen,
+            }, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
 
         console.log("3. Szerver válasz megérkezett:", res.data);
 
         if (res.data && res.data.analysis) {
             console.log("4. History frissítése az elemzési adatokkal...");
             
+            let baseHistory = sandboxHistory;
+            if (isStoredBotReview) {
+                try {
+                    const refreshed = await axios.get(`${API_BASE}/game/${botReviewGameId}/history`, {
+                        headers: { Authorization: `Bearer ${token}` },
+                    });
+                    baseHistory = normalizeBotHistory(refreshed.data?.history || []);
+                } catch (refreshError) {
+                    console.error("Could not refresh bot history after review:", refreshError);
+                }
+            }
+
+            let reviewedHistory = baseHistory;
             setSandboxHistory(prev => {
-                const updatedHistory = prev.map((h, i) => {
+                const sourceHistory = isStoredBotReview ? baseHistory : prev;
+                const updatedHistory = sourceHistory.map((h, i) => {
                     // Megkeressük a válaszban a lépés sorszáma alapján (1-től indul a backend-en)
                     const moveAnalysis = res.data.analysis.find(a => a.move_number === (i + 1));
                     
@@ -361,6 +1172,7 @@ const handleFullReview = async () => {
                 });
                 
                 console.log("5. Frissített Sandbox History:", updatedHistory);
+                reviewedHistory = updatedHistory;
                 return updatedHistory;
             });
             
@@ -368,7 +1180,74 @@ const handleFullReview = async () => {
             if (res.data.analysis[0]?.opening) {
                 setOpeningName(res.data.analysis[0].opening);
             }
-            setMasterReviewStarted(true);
+            if (isStoredBotReview) {
+                setMasterReviewGame((current) => current ? {
+                    ...current,
+                    white_accuracy: res.data.white_accuracy,
+                    black_accuracy: res.data.black_accuracy,
+                    opening: res.data.opening?.name || current.opening || '',
+                } : current);
+                setSandboxGameInfo((current) => current ? {
+                    ...current,
+                    white_accuracy: res.data.white_accuracy,
+                    black_accuracy: res.data.black_accuracy,
+                } : current);
+            }
+            if (isStoredMasterReview) {
+                setMasterReviewGame((current) => current ? {
+                    ...current,
+                    white_accuracy: res.data.white_accuracy ?? current.white_accuracy,
+                    black_accuracy: res.data.black_accuracy ?? current.black_accuracy,
+                } : current);
+                setSandboxGameInfo((current) => current ? {
+                    ...current,
+                    white_accuracy: res.data.white_accuracy ?? current.white_accuracy,
+                    black_accuracy: res.data.black_accuracy ?? current.black_accuracy,
+                } : current);
+            }
+            setMasterReviewStarted((current) => (stayOnIntro ? current : true));
+            setIsSandboxReviewComplete(true);
+            setPanelNotice(stayOnIntro ? '' : 'Game review complete');
+            try {
+                const activityDates = JSON.parse(localStorage.getItem('checkmate_activity_dates') || '[]');
+                activityDates.unshift(new Date().toISOString());
+                localStorage.setItem('checkmate_activity_dates', JSON.stringify(activityDates.slice(0, 90)));
+                window.dispatchEvent(new Event('checkmate-activity-updated'));
+            } catch {
+                // Activity tracking should not block review.
+            }
+            if (isPgnReviewRoute) {
+                const reviewId = pgnGameId || analysisSessionId || createAnalysisSessionId();
+                saveAnalysisGameToSavedList(buildCurrentSandboxSavedGame(reviewId, reviewedHistory, {
+                    opening: res.data.analysis[0]?.opening || openingName || sandboxGameInfo?.opening || '',
+                }));
+                setLastSavedGameSignature(getGameSaveSignature(reviewedHistory, sandboxStartingFen));
+            }
+            if (isCollectionReviewRoute && collectionSavedGame?.id) {
+                const updatedGame = {
+                    ...collectionSavedGame,
+                    ...buildCurrentSandboxSavedGame(collectionSavedGame.id, reviewedHistory, {
+                        white: collectionSavedGame.white,
+                        black: collectionSavedGame.black,
+                        result: collectionSavedGame.result || sandboxResult || sandboxGameInfo?.result || '*',
+                        opening: res.data.analysis[0]?.opening || openingName || collectionSavedGame.opening || '',
+                    }),
+                    white_accuracy: res.data.white_accuracy,
+                    black_accuracy: res.data.black_accuracy,
+                };
+                updateSavedAnalysisGame(updatedGame);
+                setCollectionSavedGame(updatedGame);
+                setLastSavedGameSignature(getGameSaveSignature(reviewedHistory, sandboxStartingFen));
+            }
+            if (isPgnReviewRoute && sandboxHistory.length > 0) {
+                const firstMove = sandboxHistory[0];
+                if (firstMove) {
+                    setSandboxFen(firstMove.fen);
+                    setSandboxLastMove({ from: firstMove.from, to: firstMove.to });
+                    setViewIndex(0);
+                    setSearchParams({ move: '0' }, { replace: true });
+                }
+            }
 
             console.log("--- DEBUG: Full Review Sikeresen Befejeződött ---");
         } else {
@@ -376,6 +1255,7 @@ const handleFullReview = async () => {
         }
 
     } catch (err) {
+        setIsSandboxReviewLocked(false);
         console.error("!!! FULL REVIEW ERROR !!!");
         if (err.response) {
             console.error("Status:", err.response.status);
@@ -390,6 +1270,170 @@ const handleFullReview = async () => {
         setIsAnalyzing(false);
     }
 };
+
+    useEffect(() => {
+        if (!isBotReviewRoute || !botReviewGameId || !masterReviewGame || masterReviewStarted || isAnalyzing) return;
+        if (masterReviewGame.white_accuracy != null || masterReviewGame.black_accuracy != null) return;
+        if (autoStartedBotReviewRef.current === botReviewGameId) return;
+
+        autoStartedBotReviewRef.current = botReviewGameId;
+        handleFullReview({ stayOnIntro: true });
+    }, [isBotReviewRoute, botReviewGameId, masterReviewGame, masterReviewStarted, isAnalyzing]);
+
+    useEffect(() => {
+        if (!isMasterReviewRoute || !masterReviewGameId || !masterReviewGame || masterReviewStarted || isAnalyzing) return;
+        if (masterReviewGame.white_accuracy != null || masterReviewGame.black_accuracy != null) return;
+        if (autoStartedMasterReviewRef.current === masterReviewGameId) return;
+
+        autoStartedMasterReviewRef.current = masterReviewGameId;
+        handleFullReview({ stayOnIntro: true });
+    }, [isMasterReviewRoute, masterReviewGameId, masterReviewGame, masterReviewStarted, isAnalyzing]);
+
+    const handleStartReviewFromIntro = () => {
+        const isStoredReviewRoute = isBotReviewRoute || isMasterReviewRoute || isCollectionReviewRoute;
+
+        if (isStoredReviewRoute && isAnalyzing) {
+            setMasterReviewStarted(true);
+            setPanelNotice('Preparing game review...');
+            setSandboxFen(sandboxStartingFen || DEFAULT_FEN);
+            setSandboxLastMove({ from: null, to: null });
+            setViewIndex(-2);
+            return;
+        }
+
+        const hasStoredReview = isStoredReviewRoute && (
+            masterReviewGame?.white_accuracy != null ||
+            masterReviewGame?.black_accuracy != null ||
+            sandboxHistory.some((move) => move?.analysisLabel)
+        );
+
+        if (hasStoredReview) {
+            setMasterReviewStarted(true);
+            setPanelNotice('Game review complete');
+            setSandboxFen(sandboxStartingFen || DEFAULT_FEN);
+            setSandboxLastMove({ from: null, to: null });
+            setViewIndex(-2);
+            return;
+        }
+
+        handleFullReview();
+    };
+
+    const handleReviewClick = () => {
+        if (sandboxHistory.length === 0) return;
+        if (isCollectionAnalysisRoute) {
+            setMasterReviewStarted(false);
+            const moveSuffix = location.search || '';
+            navigate(`/analysis/collection/${collectionSlug}/${encodeURIComponent(collectionGameId)}/review${moveSuffix}`);
+            return;
+        }
+        const reviewId = pgnGameId || analysisSessionId || createAnalysisSessionId();
+        if (!analysisSessionId) setAnalysisSessionId(reviewId);
+        saveAnalysisGameToSavedList(buildCurrentSandboxSavedGame(reviewId, sandboxHistory));
+        setLastSavedGameSignature(currentSaveSignature);
+        setMasterReviewStarted(false);
+        navigate(`/analysis/game/pgn/${reviewId}/review`);
+    };
+
+    const handlePgnReviewBack = () => {
+        if (!pgnGameId) return;
+        setSearchParams({}, { replace: true });
+        setMasterReviewStarted(false);
+        setSandboxFen(sandboxStartingFen || DEFAULT_FEN);
+        setSandboxLastMove({ from: null, to: null });
+        setViewIndex(-2);
+        navigate(`/analysis/game/pgn/${pgnGameId}/review`, { replace: true });
+    };
+
+    const handleStoredReviewBack = () => {
+        setMasterReviewStarted(false);
+        setPanelNotice('');
+        setSandboxFen(sandboxStartingFen || DEFAULT_FEN);
+        setSandboxLastMove({ from: null, to: null });
+        setViewIndex(-2);
+    };
+
+    const handleStartAnalysis = async (analysisInput = '') => {
+        if (!API_BASE || !token || isAnalyzing) return;
+
+        let importedAnalysis = null;
+        try {
+            importedAnalysis = parseAnalysisInput(analysisInput);
+        } catch (err) {
+            console.error("Could not parse analysis input:", err);
+            setPanelNotice("Could not read that FEN or PGN.");
+            return;
+        }
+
+        const startingFen = importedAnalysis?.startingFen || sandboxFen;
+        const importedHistory = importedAnalysis?.history || [];
+
+        setRightPanelMode('analysis');
+        setSandboxStartingFen(startingFen);
+        setSandboxHistory(importedHistory);
+        setSandboxLastMove({ from: null, to: null });
+        setSandboxFen(startingFen);
+        setViewIndex(importedHistory.length > 0 ? -2 : -1);
+        setOpeningName("");
+        setInitialAnalysis(null);
+        setPanelNotice('');
+        setSandboxResult(importedAnalysis?.result || '');
+        setSandboxGameInfo(importedAnalysis ? buildGameInfoFromMetadata(importedAnalysis.metadata, importedAnalysis.result) : null);
+        setHasLoadedSetupPosition(Boolean(importedAnalysis?.type === 'fen' && importedHistory.length === 0 && startingFen !== DEFAULT_FEN));
+        setIsSandboxReviewComplete(false);
+        setMasterReviewStarted(false);
+        setIsSandboxReviewLocked(false);
+        setIsAnalyzing(true);
+
+        try {
+            const res = await axios.post(`${API_BASE}/analyze-sandbox-move`, {
+                fen_before: startingFen,
+                move: null,
+                prev_eval: 0,
+            }, { headers: { Authorization: `Bearer ${token}` } });
+
+            if (res.data?.error) {
+                setPanelNotice(res.data.message || "Engine analysis is unavailable for this position.");
+                return;
+            }
+
+            const rawEval = Number(res.data?.eval);
+            setInitialAnalysis({
+                eval: Number.isFinite(rawEval) ? rawEval / 100 : 0,
+                engineLines: res.data?.engine_lines || [],
+            });
+            setPanelNotice('');
+
+            if (res.data?.opening) {
+                setOpeningName(res.data.opening?.name || res.data.opening || "");
+            } else if (importedAnalysis?.metadata?.Event) {
+                setOpeningName(importedAnalysis.metadata.Event);
+            }
+        } catch (err) {
+            console.error("Start analysis error:", err);
+            setPanelNotice("Engine analysis is unavailable for this position.");
+        } finally {
+            setIsAnalyzing(false);
+        }
+    };
+
+    const handleExploreTabClick = () => {
+        if (!isAnalysisExplorerRoute) {
+            navigate('/analysis/explorer');
+        }
+        setAnalysisPanelTab('explore');
+        if (!initialAnalysis && sandboxHistory.length === 0 && sandboxFen === DEFAULT_FEN) {
+            handleStartAnalysis('');
+        }
+    };
+
+    useEffect(() => {
+        if (!isAnalysisExplorerRoute) return;
+        if (!initialAnalysis && sandboxHistory.length === 0 && sandboxFen === DEFAULT_FEN && !isAnalyzing) {
+            handleStartAnalysis('');
+        }
+    }, [isAnalysisExplorerRoute, initialAnalysis, sandboxHistory.length, sandboxFen, isAnalyzing]);
+
     const handleMouseDown = (e, row, col) => {
     if (previewFen) return;
 
@@ -417,12 +1461,18 @@ const handleFullReview = async () => {
         const success = chess.put({ type, color }, square);
 
         if (success) {
-            const newFen = chess.fen();
+            const newFen = normalizeSetupFen(chess.fen(), setupTurn);
             console.log("=> SIKER: Új FEN generálva:", newFen);
             
             setSandboxFen(newFen);
             // Setup módban a kiinduló állást is frissítjük, hogy az elemzés alapja ez legyen
             setSandboxStartingFen(newFen); 
+            setIsSandboxReviewComplete(false);
+            setIsSandboxReviewLocked(false);
+            setMasterReviewStarted(false);
+            if (sandboxHistory.length === 0) {
+                setAnalysisSessionId(createAnalysisSessionId());
+            }
             
             playSound('move');
         } else {
@@ -436,7 +1486,7 @@ const handleFullReview = async () => {
     // Ez csak akkor fut le, ha NEM setup módban vagyunk, vagy nincs kijelölt bábu
     console.log("=> NORMÁL MÓD: Lépéskezelés indítása...");
 
-    if (sandboxStatus !== 'ongoing') {
+    if (sandboxStatus !== 'ongoing' || isSandboxReviewLocked || isSandboxReviewComplete) {
         return;
     }
 
@@ -487,9 +1537,15 @@ const handleExternalDrop = (e, row, col) => {
     chess.remove(square);
     chess.put({ type, color }, square);
 
-    const newFen = chess.fen();
+    const newFen = normalizeSetupFen(chess.fen(), setupTurn);
     setSandboxFen(newFen);
     setSandboxStartingFen(newFen);
+    setIsSandboxReviewComplete(false);
+    setMasterReviewStarted(false);
+    setIsSandboxReviewLocked(false);
+    if (sandboxHistory.length === 0) {
+        setAnalysisSessionId(createAnalysisSessionId());
+    }
 };
 
     const handleMouseUp = useCallback(async () => {
@@ -563,6 +1619,71 @@ const handleExternalDrop = (e, row, col) => {
         Boolean(initialAnalysis) ||
         Boolean(openingName) ||
         Boolean(panelNotice);
+    const resultLabel = getResultLabel(sandboxStatus, sandboxFen);
+    const displayedResultLabel = sandboxResult || resultLabel;
+    const currentSaveSignature = getGameSaveSignature(sandboxHistory, sandboxStartingFen);
+    const canSaveCurrentAnalysis = (sandboxHistory.length > 0 || hasLoadedSetupPosition) && currentSaveSignature !== lastSavedGameSignature;
+    const canReviewCurrentAnalysis = sandboxHistory.length > 0;
+    const savedFen = getLatestHistoryFen(sandboxHistory, sandboxFen);
+    const boardGameInfo = sandboxGameInfo || masterReviewGame;
+    const pgnReviewGame = isPgnReviewRoute ? {
+        id: pgnGameId || analysisSessionId,
+        white: sandboxGameInfo?.white || 'White',
+        black: sandboxGameInfo?.black || 'Black',
+        white_elo: sandboxGameInfo?.white_elo || '',
+        black_elo: sandboxGameInfo?.black_elo || '',
+        result: sandboxResult || sandboxGameInfo?.result || displayedResultLabel || '',
+        date: sandboxGameInfo?.date || '',
+        event: sandboxGameInfo?.event || 'Analysis',
+        site: sandboxGameInfo?.site || '',
+        opening: openingName || sandboxGameInfo?.opening || '',
+        eco: sandboxGameInfo?.eco || '',
+        moves: sandboxHistory.map((move) => move.san || move.m).join(' '),
+    } : null;
+
+    const savedAnalysisGame = masterReviewGame ? {
+        id: `master-${masterReviewGame.id}`,
+        white: masterReviewGame.white,
+        black: masterReviewGame.black,
+        white_elo: masterReviewGame.white_elo,
+        black_elo: masterReviewGame.black_elo,
+        result: masterReviewGame.result,
+        date: masterReviewGame.date,
+        event: masterReviewGame.event,
+        site: masterReviewGame.site,
+        round: masterReviewGame.round,
+        opening: masterReviewGame.detected_opening?.name || masterReviewGame.opening || openingName || '',
+        eco: masterReviewGame.detected_opening?.eco || masterReviewGame.eco || '',
+        moves: masterReviewGame.moves,
+        addedAt: new Date().toISOString(),
+    } : {
+        id: analysisSessionId,
+        source: 'analysis',
+        white: collectionSavedGame?.white || sandboxGameInfo?.white || 'White',
+        black: collectionSavedGame?.black || sandboxGameInfo?.black || 'Black',
+        result: (isCollectionAnalysisRoute && collectionSavedGame?.result) ? collectionSavedGame.result : (displayedResultLabel || '*'),
+        date: collectionSavedGame?.date || formatToday(),
+        event: collectionSavedGame?.event || (isSandboxReviewComplete ? 'Game Review, Analysis' : 'Analysis'),
+        site: collectionSavedGame?.site || 'Checkmate Analysis',
+        opening: openingName || collectionSavedGame?.opening || '',
+        eco: collectionSavedGame?.eco || '',
+        moves: buildSandboxMoves(sandboxHistory),
+        analysisHistory: sandboxHistory,
+        fen: savedFen,
+        startingFen: sandboxStartingFen,
+        initialAnalysis,
+        gameInfo: sandboxGameInfo,
+        addedAt: new Date().toISOString(),
+    };
+    const collectionReviewGame = isCollectionReviewRoute && collectionSavedGame ? {
+        ...savedAnalysisGame,
+        ...collectionSavedGame,
+        id: collectionSavedGame.id || savedAnalysisGame.id,
+        white: collectionSavedGame.white || savedAnalysisGame.white,
+        black: collectionSavedGame.black || savedAnalysisGame.black,
+        result: collectionSavedGame.result || savedAnalysisGame.result,
+        opening: openingName || collectionSavedGame.opening || savedAnalysisGame.opening,
+    } : null;
 
     const resetSandboxAnalysis = () => {
         setSandboxFen(DEFAULT_FEN);
@@ -573,13 +1694,183 @@ const handleExternalDrop = (e, row, col) => {
         setOpeningName("");
         setInitialAnalysis(null);
         setPanelNotice('');
+        setSandboxResult('');
+        setSandboxGameInfo(null);
+        setIsSandboxReviewComplete(false);
+        setRevealedBotAnalysisIndex(-1);
+        setMasterReviewStarted(false);
+        setIsSandboxReviewLocked(false);
         setPreviewFen(null);
         setPendingPromotion(null);
         setRightPanelMode('analysis');
         setSelectedSetupPiece(null);
         setIsDragging(false);
         setIsNewModalOpen(false);
+        setAnalysisSessionId(createAnalysisSessionId());
+        setCollectionContext(null);
+        setCollectionSavedGame(null);
+        setLastSavedGameSignature(null);
+        setHasLoadedSetupPosition(false);
         localStorage.removeItem('chess_analysis_cache');
+    };
+
+    const handleViewMove = (idx, options = {}) => {
+        if (idx <= -2) {
+            const soundName = getHistoryNavigationSoundName(sandboxHistory, viewIndex, -2);
+            if (soundName) playSound(soundName);
+            if (isCollectionAnalysisRoute) {
+                setSearchParams({}, { replace: true });
+            } else if (isPgnReviewRoute) {
+                setSearchParams({}, { replace: true });
+                setMasterReviewStarted(Boolean(options.keepReviewPanel));
+                if (!options.keepReviewPanel) {
+                    navigate(`/analysis/game/pgn/${pgnGameId}/review`, { replace: true });
+                }
+            }
+            setSandboxFen(sandboxStartingFen || DEFAULT_FEN);
+            setSandboxLastMove({ from: null, to: null });
+            setViewIndex(-2);
+            return;
+        }
+
+        const boundedIndex = idx === -1 ? sandboxHistory.length - 1 : idx;
+        const soundName = getHistoryNavigationSoundName(sandboxHistory, viewIndex, boundedIndex);
+        if (soundName) playSound(soundName);
+
+        if ((isCollectionAnalysisRoute || isPgnReviewRoute) && boundedIndex >= 0 && boundedIndex < sandboxHistory.length) {
+            setSearchParams({ move: String(boundedIndex) }, { replace: true });
+        }
+
+        const move = sandboxHistory[boundedIndex];
+        if (move) {
+            setSandboxFen(move.fen);
+            setSandboxLastMove({ from: move.from, to: move.to });
+            setViewIndex(boundedIndex);
+            if (isBotSelfAnalysisRoute) {
+                setRevealedBotAnalysisIndex((current) => Math.max(current, boundedIndex));
+            }
+            return;
+        }
+
+        if (idx === -1) {
+            const latest = sandboxHistory[sandboxHistory.length - 1];
+            setSandboxFen(latest ? latest.fen : DEFAULT_FEN);
+            setSandboxLastMove(latest ? { from: latest.from, to: latest.to } : { from: null, to: null });
+            setViewIndex(latest ? sandboxHistory.length - 1 : -2);
+            if (isBotSelfAnalysisRoute && latest) {
+                setRevealedBotAnalysisIndex(sandboxHistory.length - 1);
+            }
+        }
+    };
+
+    useEffect(() => {
+        if (!sandboxHistory.length) return;
+
+        const handleKeyDown = (event) => {
+            const target = event.target;
+            const tagName = target?.tagName?.toLowerCase();
+            const isTyping = tagName === 'input' || tagName === 'textarea' || tagName === 'select' || target?.isContentEditable;
+            if (isTyping || event.ctrlKey || event.metaKey || event.altKey) return;
+
+            const latestIndex = sandboxHistory.length - 1;
+            if (event.key === 'ArrowRight') {
+                event.preventDefault();
+                const nextIndex = viewIndex < -1 ? 0 : (viewIndex >= latestIndex ? -1 : viewIndex + 1);
+                handleViewMove(nextIndex);
+            } else if (event.key === 'ArrowLeft') {
+                event.preventDefault();
+                const previousIndex = viewIndex <= 0 ? -2 : (viewIndex === -1 ? latestIndex - 1 : viewIndex - 1);
+                handleViewMove(previousIndex);
+            } else if (event.key === 'Home') {
+                event.preventDefault();
+                handleViewMove(-2);
+            } else if (event.key === 'End') {
+                event.preventDefault();
+                handleViewMove(-1);
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [sandboxHistory, viewIndex]);
+
+    const handleLoadGameHistoryGame = (game, loadedHistory = [], details = {}) => {
+        const normalizedHistory = normalizeBotHistory(loadedHistory);
+        const firstMove = normalizedHistory[0];
+        setSandboxStartingFen(DEFAULT_FEN);
+        setSandboxHistory(normalizedHistory);
+        setSandboxFen(DEFAULT_FEN);
+        setSandboxLastMove({ from: null, to: null });
+        setViewIndex(normalizedHistory.length ? -2 : -1);
+        setInitialAnalysis(null);
+        setPanelNotice('');
+        setSandboxResult(details.result || game?.result || '');
+        setSandboxStatus(details.status || game?.status || 'finished');
+        setSandboxStatusReason(details.reason || '');
+        setOpeningName(details.opening?.name || details.opening || '');
+        setRightPanelMode('analysis');
+        setAnalysisPanelTab('analysis');
+        setHasLoadedSetupPosition(false);
+        setSandboxGameInfo({
+            white: game?.iWasWhite ? (localStorage.getItem('chessUsername') || 'White') : (game?.opponent || 'Black'),
+            black: game?.iWasWhite ? (game?.opponent || 'Black') : (localStorage.getItem('chessUsername') || 'White'),
+            result: details.result || game?.result || '',
+            white_rating: game?.iWasWhite ? game?.myElo : game?.elo,
+            black_rating: game?.iWasWhite ? game?.elo : game?.myElo,
+        });
+        if (!firstMove) {
+            setSandboxFen(DEFAULT_FEN);
+        }
+    };
+
+    const handleSaveToCollection = () => {
+        if (!canSaveCurrentAnalysis) return;
+
+        if (collectionSavedGame) {
+            const updatedCollection = updateSavedAnalysisGame(savedAnalysisGame);
+            setCollectionSavedGame(savedAnalysisGame);
+            setLastSavedGameSignature(currentSaveSignature);
+            if (updatedCollection && isCollectionAnalysisRoute) {
+                navigate(`/analysis/collection/${collectionSlug}/${encodeURIComponent(savedAnalysisGame.id)}/analysis`, { replace: true });
+            }
+            return;
+        }
+
+        setIsSaveModalOpen(true);
+    };
+
+    const handleUpdateCollectionSettings = (collectionId, updates) => {
+        if (!collectionId) return;
+        try {
+            const collections = JSON.parse(localStorage.getItem(COLLECTIONS_STORAGE_KEY) || '[]');
+            const updatedCollections = collections.map((collection) => (
+                collection.id === collectionId
+                    ? { ...collection, ...updates }
+                    : collection
+            ));
+            localStorage.setItem(COLLECTIONS_STORAGE_KEY, JSON.stringify(updatedCollections));
+            setCollectionContext((current) => (
+                current?.id === collectionId
+                    ? { ...current, ...updates }
+                    : current
+            ));
+        } catch (err) {
+            console.error('Could not update collection settings:', err);
+        }
+    };
+
+    const handleDeleteCollection = (collectionId) => {
+        if (!collectionId) return;
+        try {
+            const collections = JSON.parse(localStorage.getItem(COLLECTIONS_STORAGE_KEY) || '[]');
+            localStorage.setItem(
+                COLLECTIONS_STORAGE_KEY,
+                JSON.stringify(collections.filter((collection) => collection.id !== collectionId))
+            );
+        } catch (err) {
+            console.error('Could not delete collection:', err);
+        }
+        navigate('/analysis/collections');
     };
 
     return (
@@ -612,6 +1903,7 @@ const handleExternalDrop = (e, row, col) => {
                 executeAnalysisMove={executeAnalysisMove}
                 setMousePos={setMousePos}
                 setIsDragging={setIsDragging}
+                gameInfo={boardGameInfo}
             />
         
             <div className="w-[480px] h-[744px] shrink-0 relative box-border">
@@ -623,14 +1915,18 @@ const handleExternalDrop = (e, row, col) => {
                     setIsDragging(false);
                 }}
                 currentFen={sandboxFen}
+                setupTurn={setupTurn}
+                onTurnChange={setSetupTurn}
                 selectedPiece={selectedSetupPiece}
                 setIsDragging={setIsDragging}
                 isDragging={isDragging}
                 onPieceSelect={setSelectedSetupPiece}
                 onFenChange={(newFen) => {
                     try {
-                        new Chess(newFen); 
-                        setSandboxFen(newFen);
+                        const parsed = new Chess(newFen);
+                        const nextTurn = parsed.turn();
+                        setSetupTurn(nextTurn);
+                        setSandboxFen(normalizeSetupFen(newFen, nextTurn));
                         // Itt MÉG NEM töröljük a history-t, hogy gépelés közben ne villogjon
                     } catch {
                         // Keep invalid FEN ignored while typing, matching the previous behavior.
@@ -638,25 +1934,33 @@ const handleExternalDrop = (e, row, col) => {
                 }}
     
                 onLoadConfirm={async (finalFen) => {
-                const chess = new Chess(finalFen);
+                const normalizedFinalFen = normalizeSetupFen(finalFen, setupTurn);
+                const chess = new Chess(normalizedFinalFen);
                 const turn = chess.turn();
                 setIsDragging(false);
                 setSelectedSetupPiece(null);
 
-                setSandboxStartingFen(finalFen);
-                setSandboxFen(finalFen);
+                setSandboxStartingFen(normalizedFinalFen);
+                setSandboxFen(normalizedFinalFen);
                 setSandboxLastMove({ from: null, to: null });
                 setViewIndex(-1);
                 setOpeningName("");
                 setInitialAnalysis(null);
                 setPanelNotice('');
+                setSandboxResult('');
+                setSandboxGameInfo(null);
+                setIsSandboxReviewComplete(false);
+                setMasterReviewStarted(false);
+                setIsSandboxReviewLocked(false);
                 setSandboxHistory([]); 
+                setAnalysisSessionId(createAnalysisSessionId());
+                setHasLoadedSetupPosition(true);
                 setRightPanelMode('analysis');
                 setIsAnalyzing(true);
                 try {
                     // 2. Elemzés kérése
                     const res = await axios.post(`${API_BASE}/analyze-sandbox-move`, {
-                        fen_before: finalFen, 
+                        fen_before: normalizedFinalFen, 
                         move: null,
                         prev_eval: 0
                     }, { headers: { Authorization: `Bearer ${token}` } });
@@ -687,6 +1991,8 @@ const handleExternalDrop = (e, row, col) => {
                     setIsAnalyzing(false);
                 }
             }}
+                canSave={false}
+                canReview={false}
 
             />
             ) : isMasterReviewRoute && masterReviewGame && !masterReviewStarted ? (
@@ -695,7 +2001,36 @@ const handleExternalDrop = (e, row, col) => {
                 history={sandboxHistory}
                 isReviewing={isAnalyzing}
                 reviewStarted={masterReviewStarted}
+                onStartReview={handleStartReviewFromIntro}
+                allowStartDuringReview
+            />
+            ) : isPgnReviewRoute && pgnReviewGame && !masterReviewStarted ? (
+            <MasterReviewIntro
+                game={pgnReviewGame}
+                history={sandboxHistory}
+                isReviewing={isAnalyzing}
+                reviewStarted={masterReviewStarted}
                 onStartReview={handleFullReview}
+                showPhaseSummary={false}
+            />
+            ) : isCollectionReviewRoute && collectionReviewGame && !masterReviewStarted ? (
+            <MasterReviewIntro
+                game={collectionReviewGame}
+                history={sandboxHistory}
+                isReviewing={isAnalyzing}
+                reviewStarted={masterReviewStarted}
+                onStartReview={handleStartReviewFromIntro}
+                showPhaseSummary={false}
+                allowStartDuringReview
+            />
+            ) : isBotReviewRoute && masterReviewGame && !masterReviewStarted ? (
+            <MasterReviewIntro
+                game={masterReviewGame}
+                history={sandboxHistory}
+                isReviewing={isAnalyzing}
+                reviewStarted={masterReviewStarted}
+                onStartReview={handleStartReviewFromIntro}
+                allowStartDuringReview
             />
             ) : (
             <AnalysisPanel 
@@ -703,29 +2038,54 @@ const handleExternalDrop = (e, row, col) => {
                 currentEval={currentEvalValue}
                 openingName={openingName}
                 viewIndex={viewIndex}
-                onViewMove={(idx) => {
-                    const soundName = getHistoryNavigationSoundName(sandboxHistory, viewIndex, idx);
-                    if (soundName) playSound(soundName);
-                    const move = sandboxHistory[idx];
-                    if (move) {
-                        setSandboxFen(move.fen);
-                        setSandboxLastMove({ from: move.from, to: move.to });
-                        setViewIndex(idx);
-                    } else if (idx === -1) {
-                        const latest = sandboxHistory[sandboxHistory.length - 1];
-                        setSandboxFen(latest ? latest.fen : 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1');
-                        setSandboxLastMove(latest ? { from: latest.from, to: latest.to } : { from: null, to: null });
-                        setViewIndex(-1);
-                    }
-                }}
+                onViewMove={handleViewMove}
                 currentFen={sandboxFen}
                 initialAnalysis={initialAnalysis}
+                gameInfo={sandboxGameInfo}
                 statusText={panelNotice || sandboxStatusReason}
-                resultLabel={getResultLabel(sandboxStatus, sandboxFen)}
-                onSaveClick={() => setIsSaveModalOpen(true)}
+                resultLabel={displayedResultLabel}
+                activeTab={(isAnalysisGamesRoute || isCollectionGamesRoute) ? 'games' : analysisPanelTab}
+                onAnalysisTabClick={
+                    isCollectionGamesRoute
+                        ? () => navigate(`/analysis/collection/${collectionSlug}/${encodeURIComponent(collectionGameId)}/analysis`)
+                        : ((isAnalysisGamesRoute || isAnalysisExplorerRoute) ? () => navigate('/analysis') : () => setAnalysisPanelTab('analysis'))
+                }
+                canSave={canSaveCurrentAnalysis}
+                canReview={canReviewCurrentAnalysis}
+                onSaveClick={handleSaveToCollection}
                 onNewClick={() => hasActiveSandboxState && setIsNewModalOpen(true)}
-                onReviewClick={handleFullReview}
-                onSetupClick={() => setRightPanelMode('setup')} // Ez már jó volt
+                onReviewClick={isPgnReviewRoute ? handleFullReview : handleReviewClick}
+                onStartAnalysis={handleStartAnalysis}
+                onGamesTabClick={isCollectionAnalysisRoute ? () => navigate(`/analysis/collection/${collectionSlug}/${encodeURIComponent(collectionGameId)}/games`) : () => navigate('/analysis/games')}
+                onExploreTabClick={handleExploreTabClick}
+                apiBase={API_BASE}
+                token={token}
+                onLoadGameHistoryGame={handleLoadGameHistoryGame}
+                collectionContext={isCollectionAnalysisRoute && !isCollectionReviewRoute ? collectionContext : null}
+                onCollectionBackClick={() => navigate('/analysis/collections')}
+                collectionSettingsMode={isCollectionSettingsRoute}
+                onCollectionSettingsClick={() => navigate(`/analysis/collection/${collectionSlug}/${encodeURIComponent(collectionGameId)}/collection-settings`)}
+                onCollectionSettingsBackClick={() => navigate(`/analysis/collection/${collectionSlug}/${encodeURIComponent(collectionGameId)}/games`)}
+                onUpdateCollection={handleUpdateCollectionSettings}
+                onDeleteCollection={handleDeleteCollection}
+                onReviewBackClick={
+                    masterReviewStarted
+                        ? (isPgnReviewRoute ? handlePgnReviewBack : (isCollectionReviewRoute ? () => navigate(`/analysis/collection/${collectionSlug}/${encodeURIComponent(collectionGameId)}/analysis`) : ((isMasterReviewRoute || isBotReviewRoute) ? handleStoredReviewBack : undefined)))
+                        : undefined
+                }
+                reviewMode={masterReviewStarted && (isPgnReviewRoute || isMasterReviewRoute || isBotReviewRoute || isCollectionReviewRoute)}
+                hideMoveJudgement={masterReviewStarted && (isPgnReviewRoute || isMasterReviewRoute || isBotReviewRoute || isCollectionReviewRoute)}
+                hasStartingPosition={isCollectionAnalysisRoute || isSavedAnalysisRoute || isPgnReviewRoute || isBotSelfAnalysisRoute || isBotReviewRoute || viewIndex <= -2 || Boolean(initialAnalysis)}
+                showOnlyActiveMoveLabels={isBotSelfAnalysisRoute}
+                revealedMoveLabelIndex={isBotSelfAnalysisRoute ? revealedBotAnalysisIndex : null}
+                onSetupClick={() => {
+                    try {
+                        setSetupTurn(new Chess(sandboxFen).turn());
+                    } catch {
+                        setSetupTurn('w');
+                    }
+                    setRightPanelMode('setup');
+                }} // Ez már jó volt
                 onHoverVariation={handleHoverVariation}
             />
         )}
@@ -742,6 +2102,12 @@ const handleExternalDrop = (e, row, col) => {
                 <SaveCollectionModal
                     isOpen={isSaveModalOpen}
                     onClose={() => setIsSaveModalOpen(false)}
+                    game={savedAnalysisGame}
+                    onSaved={() => {
+                        setCollectionSavedGame(savedAnalysisGame);
+                        setLastSavedGameSignature(currentSaveSignature);
+                        setIsSaveModalOpen(false);
+                    }}
                 />
             </AnimatePresence>
             <AnimatePresence>

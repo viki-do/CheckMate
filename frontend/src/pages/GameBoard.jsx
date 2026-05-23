@@ -1,5 +1,5 @@
 import React, { useEffect, useCallback, useState } from 'react';
-import { Outlet, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { Outlet, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 // JAVÍTÁS: useChessGame helyett useChess Context importálása
 import { useChess } from '../context/ChessContext';
 import axios from 'axios';
@@ -10,8 +10,33 @@ import ChessBoardArea from '../components/game-board/ChessBoardArea.jsx';
 import PlayerInfoBar from '../components/game-board/PlayerInfoBar.jsx';
 import { findBotByGameData } from '../components/game-board/gameBoardUtils.js';
 import { getHistoryNavigationSoundName } from '../hooks/chess-game/soundUtils';
+import SaveCollectionModal from '../components/analyze-board/SaveCollectionModal.jsx';
+import AnalyzeEvalBar from '../components/analyze-board/AnalyzeEvalBar.jsx';
 
 const DEFAULT_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+
+const formatToday = () => new Date().toISOString().slice(0, 10).replace(/-/g, '.');
+
+const getPlayableHistory = (history = []) => history.filter((move) => move?.m && move.m !== 'start');
+
+const buildMoveText = (history = []) => (
+    getPlayableHistory(history)
+        .map((move, index) => `${index % 2 === 0 ? `${Math.floor(index / 2) + 1}. ` : ''}${move.m}`)
+        .join(' ')
+);
+
+const getLatestHistoryFen = (history = [], fallbackFen = DEFAULT_FEN) => (
+    getPlayableHistory(history).at(-1)?.fen || fallbackFen
+);
+
+const normalizeEvalForBar = (value, fallback = 0) => {
+    if (typeof value === 'string' && value.startsWith('M')) {
+        const mateValue = Number(value.slice(1));
+        if (Number.isFinite(mateValue)) return mateValue >= 0 ? 9 : -9;
+    }
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : fallback;
+};
 
 const GameBoard = () => {
     
@@ -27,8 +52,10 @@ const GameBoard = () => {
     const [previewOpponent, setPreviewOpponent] = useState(null);
     const [analysisData, setAnalysisData] = useState(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
+    const [isSaveCollectionOpen, setIsSaveCollectionOpen] = useState(false);
     const [userName, setUserName] = useState("You");
     const [userAvatarUrl, setUserAvatarUrl] = useState("");
+    const [positionEvalByFen, setPositionEvalByFen] = useState({});
 
 
     // --- 2. HOOK ÉS NAVIGÁCIÓ ---
@@ -37,27 +64,37 @@ const GameBoard = () => {
     const gameLogic = useChess(); 
     const navigate = useNavigate();
     const location = useLocation();
+    const [searchParams, setSearchParams] = useSearchParams();
     const { archiveGameId } = useParams();
 
     const {
         status, history, viewIndex, startNewGame,
         token, gameId, setFen, setLastMove, setViewIndex, isFlipped, setIsFlipped,
         getSquareName, fen, setSelectedSquare, setHoverSquare, initializeGame,
-        API_BASE, isDragging, setMousePos, playSound, reason, pendingPromotion,
+        API_BASE, isDragging, setMousePos, playSound, reason, result, pendingPromotion,
         whiteTime, blackTime, activeTimeColor, setBlackTime, setWhiteTime,
-        lastTimeControl, executeMove, setHistory, handleMouseDown, handleMouseUp,
+        lastTimeControl, opening, executeMove, setHistory, handleMouseDown, handleMouseUp,
     } = gameLogic;
     const userAvatarSrc = userAvatarUrl ? `${API_BASE}${userAvatarUrl}` : "";
 
     // --- ÚJ FÜGGVÉNYEK ---
 
     const isGameActive = !!gameId && gameId !== "null";
+    const isBotGameRoute = location.pathname.startsWith('/game/bots/');
     const shouldShowDefaultBoard = !archiveGameId && (
         location.pathname === '/play' ||
-        (location.pathname === '/play/bots' && !isGameActiveUI)
+        (location.pathname === '/play/bots' && (!isGameActive || !isGameActiveUI))
     );
     const defaultBoardIsFlipped = location.pathname === '/play/bots' ? isFlipped : false;
     const displayFen = shouldShowDefaultBoard ? DEFAULT_FEN : fen;
+    const displayedHistoryIndex = viewIndex === -1 ? history.length - 1 : Number.parseInt(viewIndex, 10);
+    const displayedHistoryMove = Number.isInteger(displayedHistoryIndex) ? history[displayedHistoryIndex] : null;
+    const currentEvalValue = normalizeEvalForBar(
+        displayedHistoryMove?.eval ?? positionEvalByFen[displayFen],
+        0
+    );
+    const whiteBarHeight = Math.min(Math.max(50 + (currentEvalValue * 10), 5), 95);
+    const shouldShowEvalBar = (location.pathname === '/play/bots' && !shouldShowDefaultBoard) || isBotGameRoute || Boolean(archiveGameId);
     const displayIsFlipped = shouldShowDefaultBoard ? defaultBoardIsFlipped : isFlipped;
     const captured = getCapturedPieces(displayFen);
     const materialDiff = getMaterialDiff(captured);
@@ -113,6 +150,47 @@ const GameBoard = () => {
     }, [initializeGame, archiveGameId]);
 
     useEffect(() => {
+        if (!shouldShowEvalBar || !API_BASE || !token || !displayFen || displayFen === DEFAULT_FEN) return;
+        if (displayedHistoryMove?.eval !== undefined && displayedHistoryMove?.eval !== null) return;
+        if (positionEvalByFen[displayFen] !== undefined) return;
+
+        let isMounted = true;
+        const loadPositionEval = async () => {
+            try {
+                const previousEval = history
+                    .slice()
+                    .reverse()
+                    .find((move) => move?.eval !== undefined && move?.eval !== null)?.eval;
+                const res = await axios.post(`${API_BASE}/analyze-sandbox-move`, {
+                    fen_before: displayFen,
+                    move: null,
+                    prev_eval: normalizeEvalForBar(previousEval, 0) * 100,
+                }, { headers: { Authorization: `Bearer ${token}` } });
+                if (!isMounted) return;
+
+                const rawEval = Number(res.data?.eval);
+                const nextEval = Number.isFinite(rawEval)
+                    ? rawEval / 100
+                    : normalizeEvalForBar(res.data?.eval, 0);
+                setPositionEvalByFen((current) => ({ ...current, [displayFen]: nextEval }));
+
+                if (displayedHistoryMove?.fen === displayFen) {
+                    setHistory((current) => current.map((move, index) => (
+                        index === displayedHistoryIndex
+                            ? { ...move, eval: nextEval, rawEval: Number.isFinite(rawEval) ? rawEval : move.rawEval }
+                            : move
+                    )));
+                }
+            } catch (err) {
+                console.error("Position eval failed:", err);
+            }
+        };
+
+        loadPositionEval();
+        return () => { isMounted = false; };
+    }, [shouldShowEvalBar, API_BASE, token, displayFen, displayedHistoryIndex, displayedHistoryMove?.eval, displayedHistoryMove?.fen, history, positionEvalByFen, setHistory]);
+
+    useEffect(() => {
         if (!archiveGameId || gameLogic.isLoading) return;
 
         let isMounted = true;
@@ -145,6 +223,30 @@ const GameBoard = () => {
         return () => { isMounted = false; };
     }, [archiveGameId, gameLogic.isLoading, gameLogic.fetchGameState, gameLogic.setGameId, setIsFlipped]);
 
+    useEffect(() => {
+        if (!isBotGameRoute || !archiveGameId || history.length === 0) return;
+        const moveParam = searchParams.get('move');
+        const requestedMove = moveParam === null ? 0 : Number.parseInt(moveParam, 10);
+        if (!Number.isInteger(requestedMove) || requestedMove < 0) return;
+
+        const targetIndex = Math.min(requestedMove, history.length - 1);
+        const targetMove = history[targetIndex];
+
+        setViewIndex(targetIndex);
+        if (targetIndex === 0 || targetMove?.m === 'start') {
+            setFen(DEFAULT_FEN);
+            setLastMove({ from: null, to: null });
+            return;
+        }
+
+        if (targetMove?.fen) {
+            setFen(targetMove.fen);
+            setLastMove(targetMove.from && targetMove.to
+                ? { from: targetMove.from, to: targetMove.to }
+                : { from: null, to: null });
+        }
+    }, [isBotGameRoute, archiveGameId, searchParams, history, setFen, setLastMove, setViewIndex]);
+
 // GameBoard.jsx - Az összes UI és Reset logika egyben (JAVÍTOTT)
     useEffect(() => {
     const handleStateSync = async () => {
@@ -167,7 +269,9 @@ const GameBoard = () => {
                     }
                 } catch { console.error("Hiba az ellenfél pótlásakor"); }
             }
-        } 
+        } else if (gameLogic.gameId && gameLogic.status && gameLogic.status !== "ongoing") {
+            setIsGameActiveUI(true);
+        }
         /**
          * 2. TAKARÍTÁS (Főmenüben)
          * CSAK AKKOR takarítunk, ha a /play oldalon vagyunk, 
@@ -178,9 +282,6 @@ const GameBoard = () => {
             setOpponent(null);
             setPreviewOpponent(null);
 
-            if (gameLogic.gameId && gameLogic.status !== "ongoing") {
-                gameLogic.resetGame();
-            }
         }
     };
 
@@ -254,6 +355,14 @@ const GameBoard = () => {
         });
         
         setAnalysisData(res.data);
+        try {
+            const activityDates = JSON.parse(localStorage.getItem('checkmate_activity_dates') || '[]');
+            activityDates.unshift(new Date().toISOString());
+            localStorage.setItem('checkmate_activity_dates', JSON.stringify(activityDates.slice(0, 90)));
+            window.dispatchEvent(new Event('checkmate-activity-updated'));
+        } catch {
+            // Streak activity is a nice-to-have; analysis should stay usable if localStorage is unavailable.
+        }
         if (res.data.opening) {
             gameLogic.setOpening(res.data.opening);
         }
@@ -351,6 +460,11 @@ const GameBoard = () => {
 
     const goToMove = useCallback((index, isWhiteOnly = false) => {
         setSelectedSquare(null);
+        const syncBotGameMoveUrl = (nextIndex) => {
+            if (!isBotGameRoute || !archiveGameId) return;
+            const normalizedIndex = nextIndex === -1 ? Math.max(history.length - 1, 0) : Math.max(0, nextIndex);
+            setSearchParams({ move: String(normalizedIndex) }, { replace: true });
+        };
         const playNavSound = (nextIndex) => {
             const soundName = getHistoryNavigationSoundName(history, viewIndex, nextIndex);
             if (soundName) playSound(soundName);
@@ -358,6 +472,7 @@ const GameBoard = () => {
 
         if (index === -1 || index >= history.length - 1) {
             playNavSound(-1);
+            syncBotGameMoveUrl(-1);
             setViewIndex(-1);
             const latest = history[history.length - 1];
             if (latest) {
@@ -370,6 +485,13 @@ const GameBoard = () => {
         const move = history[index];
         if (!move) return;
         playNavSound(index);
+        syncBotGameMoveUrl(index);
+        if (index === 0 || move.m === 'start') {
+            setFen(DEFAULT_FEN);
+            setLastMove({ from: null, to: null });
+            setViewIndex(0);
+            return;
+        }
         if (isWhiteOnly) {
             const tempChess = new Chess(move.fen);
             const undone = tempChess.undo();
@@ -383,7 +505,7 @@ const GameBoard = () => {
             setLastMove({ from: move.from, to: move.to });
             setViewIndex(index);
         }
-    }, [history, viewIndex, setFen, setLastMove, setViewIndex, setSelectedSquare, playSound]);
+    }, [history, viewIndex, setFen, setLastMove, setViewIndex, setSelectedSquare, playSound, isBotGameRoute, archiveGameId, setSearchParams]);
 
     useEffect(() => {
         const handleKeyDown = (e) => {
@@ -483,6 +605,39 @@ const GameBoard = () => {
             selectedSquare: null
         }
         : { ...gameLogic, isFlipped };
+    const botCollectionGame = (() => {
+        const playableHistory = getPlayableHistory(history);
+        const playerName = userName || 'You';
+        const botName = opponent?.name || previewOpponent?.name || 'Engine';
+        const playerColor = isFlipped ? 'black' : 'white';
+        const whiteName = playerColor === 'white' ? playerName : botName;
+        const blackName = playerColor === 'black' ? playerName : botName;
+        return {
+            id: `bot-${gameId || Date.now()}`,
+            source: 'bot-game',
+            white: whiteName,
+            black: blackName,
+            white_elo: playerColor === 'white' ? '' : (opponent?.elo || previewOpponent?.elo || ''),
+            black_elo: playerColor === 'black' ? '' : (opponent?.elo || previewOpponent?.elo || ''),
+            result: gameLogic.result || result || '*',
+            date: formatToday(),
+            event: 'Bot Game',
+            site: 'Checkmate',
+            opening: opening?.name || opening || '',
+            eco: opening?.eco || '',
+            moves: buildMoveText(history),
+            analysisHistory: playableHistory,
+            fen: getLatestHistoryFen(history, fen),
+            startingFen: DEFAULT_FEN,
+            initialAnalysis: null,
+            gameInfo: {
+                white: whiteName,
+                black: blackName,
+                result: gameLogic.result || result || '*',
+            },
+            addedAt: new Date().toISOString(),
+        };
+    })();
     const handlePopupNewGame = () => {
         setIsGameActiveUI(false);
         setAnalysisData(null);
@@ -493,9 +648,38 @@ const GameBoard = () => {
         navigate('/play/bots');
     };
 
+    const handleDeleteGame = async () => {
+        if (!gameId || gameId === "null") return;
+        const confirmed = window.confirm("Delete this game from your history?");
+        if (!confirmed) return;
+
+        try {
+            await axios.delete(`${API_BASE}/game/${gameId}`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            handleResetGame();
+            navigate('/home');
+        } catch (err) {
+            console.error("Could not delete game:", err);
+        }
+    };
+
+    const handleOpenSelfAnalysis = () => {
+        if (!gameId || gameId === "null") return;
+        window.open(`/analysis/game/bots/${gameId}/analysis`, '_blank', 'noopener,noreferrer');
+    };
+
+    const handleOpenGameReview = () => {
+        if (!gameId || gameId === "null") return;
+        navigate(`/analysis/game/bots/${gameId}/review`);
+    };
+
     return (
         <div className="flex justify-center items-center h-screen w-full bg-[#1e1e1e] gap-6 p-4 overflow-hidden select-none relative">
-            <CapturedProgressBar />
+            {!shouldShowEvalBar && <CapturedProgressBar />}
+            {shouldShowEvalBar && (
+                <AnalyzeEvalBar whiteBarHeight={whiteBarHeight} currentEvalValue={currentEvalValue} />
+            )}
 
             <div className="flex flex-col justify-center items-center h-full shrink-0">
                 <PlayerInfoBar
@@ -564,9 +748,20 @@ const GameBoard = () => {
                 goToMove,
                 handleRunFullAnalysis, // <--- EZ HIÁNYZOTT
                 analysisData,          // <--- EZ HIÁNYZOTT
+                onGameReviewClick: handleOpenGameReview,
+                onSelfAnalysisClick: handleOpenSelfAnalysis,
                 isAnalyzing,
+                onAddToCollection: () => setIsSaveCollectionOpen(true),
+                onDeleteGame: handleDeleteGame,
+                isArchiveGame: Boolean(archiveGameId),
             }} />
             </div>
+
+            <SaveCollectionModal
+                isOpen={isSaveCollectionOpen}
+                onClose={() => setIsSaveCollectionOpen(false)}
+                game={botCollectionGame}
+            />
         </div>
     );
 }; 

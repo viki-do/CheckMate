@@ -3,16 +3,23 @@ import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import { Mail, User, Lock, ChevronLeft } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
+import { PASSWORD_REQUIREMENTS_MESSAGE, passwordMeetsRequirements } from '../utils/passwordValidation';
 
 const RegisterPage = () => {
   const [regStep, setRegStep] = useState(1); // 1: Választás, 2: Adatmegadás
   const [registerForm, setRegisterForm] = useState({ username: '', email: '', password: '' });
+  const [registerError, setRegisterError] = useState('');
   const navigate = useNavigate();
 
   const handleRegister = async (e) => {
     e.preventDefault();
+    setRegisterError('');
+    if (!passwordMeetsRequirements(registerForm.password)) {
+      setRegisterError(PASSWORD_REQUIREMENTS_MESSAGE);
+      return;
+    }
     try {
-      await axios.post('http://127.0.0.1:8000/register', registerForm);
+      await axios.post('http://localhost:8000/register', registerForm);
       alert("Sikeres regisztráció! Most már bejelentkezhetsz.");
       navigate('/login');
     } catch (err) {
@@ -22,7 +29,13 @@ const RegisterPage = () => {
   };
 
   const handleSocialLogin = (provider) => {
-    window.location.href = `http://127.0.0.1:8000/auth/${provider}`;
+    window.location.assign(`http://localhost:8000/auth/${provider}`);
+  };
+
+  const handlePasswordChange = (e) => {
+    const nextPassword = e.target.value;
+    if (registerError && nextPassword.length === 0) setRegisterError('');
+    setRegisterForm({ ...registerForm, password: nextPassword });
   };
 
   // Reusable Tailwind classes
@@ -84,9 +97,9 @@ const RegisterPage = () => {
                   Continue with Google
                 </button>
 
-                <button onClick={() => handleSocialLogin('apple')} className={socialBtnClasses}>
-                  <img src="/assets/logos/apple.svg" alt="apple" className="w-5 h-5 object-contain invert pointer-events-none" />
-                  Continue with Apple
+                <button onClick={() => handleSocialLogin('github')} className={socialBtnClasses}>
+                  <img src="/assets/logos/github.svg" alt="github" className="w-5 h-5 object-contain invert pointer-events-none" />
+                  Continue with GitHub
                 </button>
               </div>
             </motion.div>
@@ -111,6 +124,11 @@ const RegisterPage = () => {
               <h2 className="text-white text-2xl font-bold mb-6">Sign up with Email</h2>
               
               <form onSubmit={handleRegister} className="flex flex-col gap-3">
+                {registerError && (
+                  <div className="rounded border-l-4 border-[#ff4b35] bg-[#3e2521] px-3 py-2 text-sm font-bold text-white">
+                    {registerError}
+                  </div>
+                )}
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8b8987]" size={20} />
                   <input 
@@ -131,7 +149,7 @@ const RegisterPage = () => {
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8b8987]" size={20} />
                   <input 
                     type="password" placeholder="Password" required className={inputClasses}
-                    onChange={(e) => setRegisterForm({ ...registerForm, password: e.target.value })} 
+                    onChange={handlePasswordChange} 
                   />
                 </div>
 

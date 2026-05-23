@@ -7,11 +7,101 @@ import { Chess } from 'chess.js';
 import GameHistoryTypeIcon from '../components/game-history/GameHistoryTypeIcon';
 import ReviewAccuracyButton from '../components/game-history/ReviewAccuracyButton';
 
+const COLLECTIONS_STORAGE_KEY = 'checkmate_game_collections';
+
+const parseActivityDate = (value) => {
+    if (!value) return null;
+    if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
+    const text = String(value).trim();
+    const dottedMatch = text.match(/^(\d{4})\.(\d{2})\.(\d{2})$/);
+    if (dottedMatch) {
+        return new Date(Number(dottedMatch[1]), Number(dottedMatch[2]) - 1, Number(dottedMatch[3]));
+    }
+    const parsed = new Date(text);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const toDateKey = (date) => {
+    const safeDate = parseActivityDate(date);
+    if (!safeDate) return null;
+    return `${safeDate.getFullYear()}-${String(safeDate.getMonth() + 1).padStart(2, '0')}-${String(safeDate.getDate()).padStart(2, '0')}`;
+};
+
+const addDays = (date, amount) => {
+    const next = new Date(date);
+    next.setDate(next.getDate() + amount);
+    return next;
+};
+
+const daysBetweenKeys = (startKey, endKey) => {
+    const start = parseActivityDate(startKey);
+    const end = parseActivityDate(endKey);
+    if (!start || !end) return 0;
+    start.setHours(0, 0, 0, 0);
+    end.setHours(0, 0, 0, 0);
+    return Math.round((end - start) / 86400000);
+};
+
+const getCollectionActivityDates = () => {
+    try {
+        const collections = JSON.parse(localStorage.getItem(COLLECTIONS_STORAGE_KEY) || '[]');
+        return collections.flatMap((collection) => (
+            Array.isArray(collection.games)
+                ? collection.games.map((game) => game.updatedAt || game.date || game.addedAt)
+                : []
+        ));
+    } catch {
+        return [];
+    }
+};
+
+const getLocalActivityDates = () => {
+    try {
+        return JSON.parse(localStorage.getItem('checkmate_activity_dates') || '[]');
+    } catch {
+        return [];
+    }
+};
+
+const getActiveStreakIcon = (days) => {
+    if (days >= 1500) return 'active-10.svg';
+    if (days >= 750) return 'active-9.svg';
+    if (days >= 180) return 'active-8.svg';
+    if (days >= 30) return 'active-7.svg';
+    if (days >= 14) return 'active-6.svg';
+    if (days >= 7) return 'active-5.svg';
+    if (days >= 5) return 'active-4.svg';
+    if (days >= 3) return 'active-3.svg';
+    if (days >= 2) return 'active-2.svg';
+    return 'active-1.svg';
+};
+
+const buildStreakState = (activityDates) => {
+    const activityKeys = new Set(activityDates.map(toDateKey).filter(Boolean));
+    if (!activityKeys.size) return { label: 'Start Your Streak', icon: 'inactive-1.svg' };
+
+    const todayKey = toDateKey(new Date());
+    const latestKey = Array.from(activityKeys).sort().at(-1);
+    if (daysBetweenKeys(latestKey, todayKey) >= 2) {
+        return { label: 'Streak Paused', icon: 'pending.svg' };
+    }
+
+    let streakDays = 0;
+    let cursor = parseActivityDate(latestKey);
+    while (cursor && activityKeys.has(toDateKey(cursor))) {
+        streakDays += 1;
+        cursor = addDays(cursor, -1);
+    }
+
+    return { label: `${streakDays} Day Streak`, icon: getActiveStreakIcon(streakDays) };
+};
+
 const HomePage = () => {
     const navigate = useNavigate();
     const startFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
     const [reviewGame, setReviewGame] = React.useState(null);
     const [gameHistory, setGameHistory] = React.useState([]);
+    const [activityDates, setActivityDates] = React.useState([]);
     const [isHistoryLoading, setIsHistoryLoading] = React.useState(false);
     const [avatarUrl, setAvatarUrl] = React.useState("");
     const username = localStorage.getItem('chessUsername');
@@ -52,6 +142,36 @@ const HomePage = () => {
     }, [username]);
 
     React.useEffect(() => {
+        if (!username) return;
+
+        let isMounted = true;
+        const loadActivityDates = async () => {
+            const localDates = [...getCollectionActivityDates(), ...getLocalActivityDates()];
+            try {
+                const res = await axios.get(`http://localhost:8000/user-activity-dates/${encodeURIComponent(username)}`);
+                if (isMounted) setActivityDates([...(res.data.dates || []), ...localDates]);
+            } catch {
+                if (isMounted) setActivityDates(localDates);
+            }
+        };
+
+        loadActivityDates();
+
+        const refreshCollectionDates = () => {
+            loadActivityDates();
+        };
+        window.addEventListener('storage', refreshCollectionDates);
+        window.addEventListener('checkmate-activity-updated', refreshCollectionDates);
+        window.addEventListener('focus', refreshCollectionDates);
+        return () => {
+            isMounted = false;
+            window.removeEventListener('storage', refreshCollectionDates);
+            window.removeEventListener('checkmate-activity-updated', refreshCollectionDates);
+            window.removeEventListener('focus', refreshCollectionDates);
+        };
+    }, [username]);
+
+    React.useEffect(() => {
         let isMounted = true;
         axios.get(`http://localhost:8000/profile`, {
             headers: { Authorization: `Bearer ${localStorage.getItem('chessToken')}` }
@@ -68,6 +188,8 @@ const HomePage = () => {
             window.removeEventListener("profile-avatar-updated", handleAvatarUpdated);
         };
     }, []);
+
+    const streakState = React.useMemo(() => buildStreakState(activityDates), [activityDates]);
 
     return (
     <div className="flex flex-col p-10 bg-[#2f2e2a] min-h-screen font-sans text-[#bab9b8]">
@@ -103,16 +225,20 @@ const HomePage = () => {
         <div className="flex flex-row gap-8 items-start mb-12">
             <div className="flex flex-col w-72">
                 <div className="flex items-center gap-4 mb-6 h-16">
-                    <span className="text-6xl">🔥</span>
+                    <img
+                        src={`/assets/icons/${streakState.icon}`}
+                        alt=""
+                        className="w-16 h-16 object-contain"
+                    />
                     <div className="flex flex-col">
                         <span className="text-xs uppercase font-black text-[#8b8987] tracking-wider leading-none mb-1">Streak</span>
-                        <span className="text-xl font-black text-white leading-none">2 Day Streak</span>
+                        <span className="text-xl font-black text-white leading-none">{streakState.label}</span>
                     </div>
                 </div>
                 <div className="flex flex-col gap-2">
-                    <PlayButton iconSrc="/assets/icons/rapid.svg" label="Play 10 min" isMain={true} onClick={() => navigate('/play')} />
+                    <PlayButton iconSrc="/assets/icons/rapid.svg" label="Play 10 min" isMain={true} />
                     <PlayButton iconSrc="/assets/logos/play.png" label="New Game" />
-                    <PlayButton iconSrc="/assets/moves/device-bot.svg" label="Play Bots" />
+                    <PlayButton iconSrc="/assets/moves/device-bot.svg" label="Play Bots" onClick={() => navigate('/play/bots')} />
                     <PlayButton iconSrc="/assets/icons/handshake.svg" label="Play a Friend" />
                 </div>
             </div>
@@ -159,7 +285,7 @@ const HomePage = () => {
                     label={reviewGame ? `Review vs ${reviewGame.opponent}` : "Play a game first"} 
                     onClick={() => {
                         if(reviewGame) {
-                            navigate(`/play/archive/${reviewGame.game_id}`);
+                            navigate(`/game/bots/${reviewGame.game_id}?move=0`);
                         } else {
                             navigate('/play');
                         }
@@ -174,7 +300,7 @@ const HomePage = () => {
         <div className="flex flex-col lg:flex-row gap-8 items-stretch mb-10">
             
             {/* BAL OLDAL - GAME HISTORY (Archive Ikonokkal) */}
-            <div className="flex-1 bg-[#262421] rounded-lg border border-[#3c3a37] flex flex-col overflow-hidden">
+            <div className="flex-1 self-start bg-[#262421] rounded-lg border border-[#3c3a37] flex flex-col overflow-hidden">
                 <div 
                     onClick={() => navigate(`/games/archive/${username}`)} 
                     className="p-4 border-b border-[#3c3a37] bg-[#2b2926] flex justify-between items-center cursor-pointer group hover:bg-[#312e2b] transition-colors h-[57px] shrink-0"
@@ -182,7 +308,7 @@ const HomePage = () => {
                     <h3 className="font-bold text-white text-lg">Game History</h3>
                 </div>
                 
-                <div className="flex-1 overflow-hidden">
+                <div className="overflow-hidden">
                     <table className="w-full text-left text-md border-collapse">
                         <thead className="bg-[#1e1e1e] text-[#8b8987] font-bold uppercase text-[10px] tracking-wider">
                             <tr>
@@ -196,13 +322,13 @@ const HomePage = () => {
                         </thead>
                         <tbody className="divide-y divide-[#3c3a37]">
                             {isHistoryLoading && (
-                                <tr>
-                                    <td colSpan="6" className="px-4 py-8 text-center text-[#8b8987] font-bold">Loading games...</td>
+                                <tr className="h-[70px]">
+                                    <td colSpan="6" className="px-4 text-center text-[#8b8987] font-bold">Loading games...</td>
                                 </tr>
                             )}
                             {!isHistoryLoading && gameHistory.length === 0 && (
-                                <tr>
-                                    <td colSpan="6" className="px-4 py-8 text-center text-[#8b8987] font-bold">No games yet</td>
+                                <tr className="h-[70px]">
+                                    <td colSpan="6" className="px-4 text-center text-[#8b8987] font-bold">No games yet</td>
                                 </tr>
                             )}
                             {!isHistoryLoading && gameHistory.slice(0, 5).map((game) => {
@@ -226,7 +352,7 @@ const HomePage = () => {
                                     <tr
                                         key={game.id}
                                         className="hover:bg-[#2b2926] transition-colors h-[70px] group cursor-pointer"
-                                        onClick={() => navigate(`/play/archive/${game.id}`)}
+                                        onClick={() => navigate(`/game/bots/${game.id}?move=0`)}
                                     >
                                         {/* KATEGÓRIA IKON (Tűpontos Archive másolat) */}
                                         <td className="px-4 py-2 text-center align-middle">
@@ -274,7 +400,7 @@ const HomePage = () => {
                                                     <span className="text-white">{game.accuracy[1] ?? '-'}</span>
                                                 </div>
                                             ) : (
-                                                <ReviewAccuracyButton gameId={game.id} onReview={(id) => navigate(`/play/archive/${id}`)} />
+                                                <ReviewAccuracyButton gameId={game.id} onReview={(id) => navigate(`/game/bots/${id}?move=0`)} />
                                             )}
                                         </td>
 
