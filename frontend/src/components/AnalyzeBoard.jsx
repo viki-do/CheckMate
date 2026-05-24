@@ -4,7 +4,7 @@ import axios from 'axios';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import AnalysisPanel from './AnalysisPanel';
 import { useChess } from '../context/ChessContext';
-import SetUpPositionView from './component_helpers/SetUpPositionView';
+import SetUpPositionView from './component_helpers/SetupPositionView';
 import { AnimatePresence } from 'framer-motion';
 import MasterReviewIntro from './analysis-panel/MasterReviewIntro';
 import { getCapturedPieces, getMaterialDiff } from './materialUtils';
