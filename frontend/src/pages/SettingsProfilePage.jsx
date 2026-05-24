@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { PiecePawn } from "../components/icons/Icons";
-import { API_BASE, profileAvatarSrc } from "../config/api";
+import { API_BASE, profileAvatarSrc, useDefaultAvatarOnError } from "../config/api";
 
 const sidebarItems = [
     { label: "Board & Pieces", icon: "fa-chess-board" },
@@ -287,6 +287,7 @@ const SettingsProfilePage = () => {
                                             <img
                                                 src={getAvatarSrc(avatarUrl)}
                                                 alt="avatar"
+                                                onError={useDefaultAvatarOnError}
                                                 className={`w-full h-full object-cover ${avatarUrl ? "" : "opacity-55"}`}
                                             />
                                             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/45 transition-colors"></div>

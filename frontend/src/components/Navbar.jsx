@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { MoreHorizontal } from 'lucide-react';
 import axios from 'axios';
-import { API_BASE, profileAvatarSrc } from '../config/api';
+import { API_BASE, profileAvatarSrc, useDefaultAvatarOnError } from '../config/api';
 
 const getAvatarSrc = profileAvatarSrc;
 
@@ -244,7 +244,7 @@ const Navbar = () => {
                     className={`w-full min-w-0 flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-all ${location.pathname.startsWith('/member') ? 'bg-[#312e2b] text-white' : 'text-[#bab9b8] hover:bg-[#312e2b] hover:text-white'}`}
                 >
                     <div className="w-6 h-6 bg-[#3c3a37] rounded flex justify-center items-center overflow-hidden">
-                        <img src={getAvatarSrc(avatarUrl)} alt="Profile" className="w-full h-full object-cover" />
+                        <img src={getAvatarSrc(avatarUrl)} alt="Profile" onError={useDefaultAvatarOnError} className="w-full h-full object-cover" />
                     </div>
                     <span className="text-sm font-semibold truncate">{username}</span>
                 </div>

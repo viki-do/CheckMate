@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { profileAvatarSrc } from "../../config/api";
+import { profileAvatarSrc, useDefaultAvatarOnError } from "../../config/api";
 
 const getAvatarSrc = profileAvatarSrc;
 
@@ -13,6 +13,7 @@ const ProfileHeader = ({ user, urlUsername }) => {
                 <img
                     src={getAvatarSrc(user.avatar_url)}
                     alt="avatar"
+                    onError={useDefaultAvatarOnError}
                     className={`w-full h-full object-cover ${user.avatar_url ? "" : "opacity-50"}`}
                 />
             </div>
