@@ -452,7 +452,7 @@ const DatabaseGameViewer = ({ game }) => {
   }, [moveIndex, replay.history.length]);
 
   return (
-    <main className="flex min-h-dvh w-full flex-col items-center justify-start bg-[#1e1e1e] gap-4 p-3 overflow-y-auto overflow-x-hidden select-none relative md:h-dvh md:flex-row md:justify-center md:gap-4 md:p-4 md:overflow-hidden xl:gap-6">
+    <main className="analysis-shell flex min-h-dvh w-full flex-col items-center justify-start bg-[#1e1e1e] gap-4 p-3 overflow-y-auto overflow-x-hidden select-none relative md:h-dvh md:flex-row md:justify-center md:gap-4 md:p-4 md:overflow-hidden xl:gap-6">
       <CapturedProgressBar />
 
       <div className="flex flex-col justify-center items-center h-full shrink-0">

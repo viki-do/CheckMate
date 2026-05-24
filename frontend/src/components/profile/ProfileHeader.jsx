@@ -12,8 +12,8 @@ const ProfileHeader = ({ user, urlUsername }) => {
     const fullName = [user.first_name, user.last_name].filter(Boolean).join(" ");
 
     return (
-        <div className="bg-[#262421] rounded-t-lg p-8 border-x border-t border-[#3c3a37] flex flex-col md:flex-row gap-8 relative">
-            <div className="w-40 h-40 bg-[#312e2b] rounded-sm flex items-center justify-center border border-[#3c3a37] overflow-hidden shrink-0">
+        <div className="profile-header bg-[#262421] rounded-t-lg p-8 border-x border-t border-[#3c3a37] flex flex-col md:flex-row gap-8 relative">
+            <div className="profile-avatar w-40 h-40 bg-[#312e2b] rounded-sm flex items-center justify-center border border-[#3c3a37] overflow-hidden shrink-0">
                 <img
                     src={getAvatarSrc(user.avatar_url)}
                     alt="avatar"
@@ -22,7 +22,7 @@ const ProfileHeader = ({ user, urlUsername }) => {
             </div>
             <div className="flex-1 space-y-4 text-white">
                 <div className="flex items-center gap-3">
-                    <h1 className="text-4xl font-bold">{user.username || urlUsername}</h1>
+                    <h1 className="profile-name text-4xl font-bold">{user.username || urlUsername}</h1>
                 </div>
                 {fullName && (
                     <div className="text-[#d7d6d4] text-xl font-medium">

@@ -193,10 +193,10 @@ const HomePage = () => {
     const streakState = React.useMemo(() => buildStreakState(activityDates), [activityDates]);
 
     return (
-    <div className="flex flex-col p-4 md:p-8 lg:p-10 bg-[#2f2e2a] min-h-screen font-sans text-[#bab9b8]">
+    <div className="home-page flex flex-col p-4 md:p-8 lg:p-10 bg-[#2f2e2a] min-h-screen font-sans text-[#bab9b8]">
         
         {/* --- 1. FELHASZNÁLÓI FEJLÉC --- */}
-        <div className="flex items-center gap-3 mb-10 w-fit">
+        <div className="home-profile flex items-center gap-3 mb-10 w-fit">
             <button
                 type="button"
                 onClick={() => navigate(`/member/${username || 'user'}`)}
@@ -223,8 +223,8 @@ const HomePage = () => {
         </div>
 
         {/* --- 2. FELSŐ DASHBOARD SZEKCIÓ --- */}
-        <div className="grid grid-cols-1 gap-6 items-start mb-12 sm:grid-cols-2 xl:grid-cols-4 xl:gap-8">
-            <div className="flex flex-col w-full xl:w-72">
+        <div className="home-dashboard-grid grid grid-cols-1 gap-6 items-start mb-12 sm:grid-cols-2 xl:grid-cols-4 xl:gap-8">
+            <div className="home-dashboard-column flex flex-col w-full xl:w-72">
                 <div className="flex items-center gap-4 mb-6 h-16">
                     <img
                         src={`/assets/icons/${streakState.icon}`}
@@ -236,7 +236,7 @@ const HomePage = () => {
                         <span className="text-xl font-black text-white leading-none">{streakState.label}</span>
                     </div>
                 </div>
-                <div className="flex flex-col gap-2">
+                <div className="home-play-list flex flex-col gap-2">
                     <PlayButton iconSrc="/assets/icons/rapid.svg" label="Play 10 min" isMain={true} />
                     <PlayButton iconSrc="/assets/logos/play.png" label="New Game" />
                     <PlayButton iconSrc="/assets/moves/device-bot.svg" label="Play Bots" onClick={() => navigate('/play/bots')} />
@@ -244,7 +244,7 @@ const HomePage = () => {
                 </div>
             </div>
 
-            <div className="flex flex-col w-full xl:w-72">
+            <div className="home-dashboard-column flex flex-col w-full xl:w-72">
                 <HeaderSection 
                     icon={<img src="https://www.chess.com/bundles/web/images/color-icons/puzzles.svg" className="w-16 h-16" alt="" />}
                     title="Puzzles" sub="200" extra="🔥 3"
@@ -254,7 +254,7 @@ const HomePage = () => {
                 </BoardCard>
             </div>
 
-            <div className="flex flex-col w-full xl:w-72">
+            <div className="home-dashboard-column flex flex-col w-full xl:w-72">
                 <HeaderSection 
                     icon={
                         <img 
@@ -270,7 +270,7 @@ const HomePage = () => {
                 </BoardCard>
             </div>
 
-            <div className="flex flex-col w-full xl:w-72">
+            <div className="home-dashboard-column flex flex-col w-full xl:w-72">
                 <HeaderSection 
                     icon={
                         <img 
@@ -298,7 +298,7 @@ const HomePage = () => {
         </div>
 
         {/* --- 3. ALSÓ SZEKCIÓ (Minden ikon és méret szinkronban) --- */}
-        <div className="flex flex-col lg:flex-row gap-8 items-stretch mb-10">
+        <div className="home-lower-grid flex flex-col lg:flex-row gap-8 items-stretch mb-10">
             
             {/* BAL OLDAL - GAME HISTORY (Archive Ikonokkal) */}
             <div className="flex-1 self-start bg-[#262421] rounded-lg border border-[#3c3a37] flex flex-col overflow-hidden">
@@ -419,7 +419,7 @@ const HomePage = () => {
             </div>
 
             {/* JOBB OLDAL - STATS */}
-            <div className="w-full lg:w-80 bg-[#262421] rounded-lg border border-[#3c3a37] flex flex-col overflow-hidden h-full">
+            <div className="home-stats-panel w-full lg:w-80 bg-[#262421] rounded-lg border border-[#3c3a37] flex flex-col overflow-hidden h-full">
                 <div className="p-4 border-b border-[#3c3a37] bg-[#2b2926] flex justify-between items-center h-[57px] shrink-0">
                     <h3 className="font-bold text-white text-[15px]">Stats</h3>
                     <i className="fas fa-chevron-right text-[#666] text-xs"></i>
@@ -471,7 +471,7 @@ const MiniChessBoard = ({ fen }) => {
     }, [fen]);
 
     return (
-        <div className="aspect-square w-full max-w-[288px] grid grid-cols-8 grid-rows-8 border-collapse">
+        <div className="home-mini-board aspect-square w-full max-w-[288px] grid grid-cols-8 grid-rows-8 border-collapse">
             {squares.map(({ square, piece, isDark }) => (
                 <div key={square} className={`aspect-square relative flex items-center justify-center ${isDark ? 'bg-[#769656]' : 'bg-[#eeeed2]'}`}>
                     {piece && (

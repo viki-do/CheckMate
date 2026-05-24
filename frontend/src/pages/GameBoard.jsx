@@ -675,7 +675,7 @@ const GameBoard = () => {
     };
 
     return (
-        <div className="flex min-h-dvh w-full flex-col items-center justify-start bg-[#1e1e1e] gap-4 p-3 overflow-y-auto overflow-x-hidden select-none relative md:h-dvh md:flex-row md:justify-center md:p-4 md:overflow-hidden xl:gap-6">
+        <div className="analysis-shell flex min-h-dvh w-full flex-col items-center justify-start bg-[#1e1e1e] gap-4 p-3 overflow-y-auto overflow-x-hidden select-none relative md:h-dvh md:flex-row md:justify-center md:p-4 md:overflow-hidden xl:gap-6">
             {!shouldShowEvalBar && <CapturedProgressBar />}
             {shouldShowEvalBar && (
                 <AnalyzeEvalBar whiteBarHeight={whiteBarHeight} currentEvalValue={currentEvalValue} />

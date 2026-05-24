@@ -133,6 +133,14 @@
     user-select: none;
 }
 
+@media (min-width: 1280px) {
+  .home-dashboard-grid,
+  .home-lower-grid {
+    width: 1248px;
+    max-width: 100%;
+  }
+}
+
 .app-board-size {
   width: min(680px, calc(100vw - 32px));
   height: min(680px, calc(100vw - 32px));
@@ -190,5 +198,163 @@
     width: 540px;
     min-width: 540px;
     height: min(880px, calc(100dvh - 24px));
+  }
+}
+
+@media (min-width: 1280px) {
+  .analysis-shell {
+    height: 100vh !important;
+    min-height: auto !important;
+    flex-direction: row !important;
+    justify-content: flex-start !important;
+    align-items: center !important;
+    padding: 16px 24px !important;
+    gap: 24px !important;
+    overflow: hidden !important;
+  }
+
+  .analysis-shell .app-board-size {
+    width: 680px;
+    height: 680px;
+  }
+
+  .analysis-shell .app-board-width {
+    width: 680px;
+  }
+
+  .analysis-shell .app-board-height {
+    height: 680px;
+  }
+
+  .analysis-shell .app-panel-size {
+    width: 480px;
+    min-width: 480px;
+    height: 744px;
+  }
+}
+
+@media (min-width: 1280px) and (min-aspect-ratio: 16/10) and (max-resolution: 1.1dppx) {
+  .analysis-shell {
+    justify-content: center !important;
+  }
+
+  .analysis-shell .app-board-size {
+    width: 760px;
+    height: 760px;
+  }
+
+  .analysis-shell .app-board-width {
+    width: 760px;
+  }
+
+  .analysis-shell .app-board-height {
+    height: 760px;
+  }
+
+  .analysis-shell .app-panel-size {
+    width: 560px;
+    min-width: 560px;
+    height: min(840px, calc(100dvh - 32px));
+  }
+
+  .home-page {
+    --home-card-width: 405px;
+    --home-card-gap: 24px;
+    --home-grid-width: calc((var(--home-card-width) * 4) + (var(--home-card-gap) * 3));
+    --home-history-width: calc((var(--home-card-width) * 3) + (var(--home-card-gap) * 2));
+    padding: 52px 40px 40px !important;
+  }
+
+  .home-profile {
+    margin-bottom: 52px !important;
+  }
+
+  .home-dashboard-grid {
+    grid-template-columns: repeat(4, var(--home-card-width)) !important;
+    justify-content: center !important;
+    width: var(--home-grid-width) !important;
+    max-width: 100% !important;
+    gap: var(--home-card-gap) !important;
+    margin-bottom: 58px !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+  }
+
+  .home-dashboard-column {
+    width: var(--home-card-width) !important;
+  }
+
+  .home-play-button {
+    height: 102px !important;
+    padding-left: 28px !important;
+    padding-right: 28px !important;
+  }
+
+  .home-play-list {
+    gap: 24px !important;
+  }
+
+  .home-board-card {
+    width: var(--home-card-width) !important;
+    height: 480px !important;
+  }
+
+  .home-board-card-board,
+  .home-mini-board {
+    width: var(--home-card-width) !important;
+    height: var(--home-card-width) !important;
+    max-width: var(--home-card-width) !important;
+  }
+
+  .home-board-card-label {
+    height: 75px !important;
+    font-size: 18px !important;
+  }
+
+  .home-lower-grid {
+    display: grid !important;
+    grid-template-columns: var(--home-history-width) var(--home-card-width) !important;
+    width: var(--home-grid-width) !important;
+    max-width: 100% !important;
+    gap: var(--home-card-gap) !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    transform: translateX(-11px);
+  }
+
+  .home-stats-panel {
+    width: var(--home-card-width) !important;
+  }
+
+  .profile-container {
+    width: 1600px !important;
+    max-width: calc(100vw - 240px) !important;
+    padding-top: 48px !important;
+  }
+
+  .profile-header {
+    min-height: 300px !important;
+    padding: 48px !important;
+    gap: 44px !important;
+  }
+
+  .profile-avatar {
+    width: 230px !important;
+    height: 230px !important;
+  }
+
+  .profile-name {
+    font-size: 50px !important;
+    line-height: 1 !important;
+  }
+
+  .profile-content-grid {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) 455px !important;
+    gap: 36px !important;
+  }
+
+  .profile-search-panel {
+    width: 455px !important;
   }
 }

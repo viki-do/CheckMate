@@ -127,13 +127,13 @@ const ProfilePage = ({ archiveMode = false }) => {
     };
 
     return (
-        <div className="min-h-screen bg-[#1e1e1e] text-[#bab9b8] font-sans pb-10">
-            <div className="max-w-6xl mx-auto pt-8 px-4">
+        <div className="profile-page min-h-screen bg-[#1e1e1e] text-[#bab9b8] font-sans pb-10">
+            <div className="profile-container max-w-6xl mx-auto pt-8 px-4">
                 <ProfileHeader user={user} urlUsername={urlUsername} />
 
                 <ProfileTabs archiveMode={archiveMode} onTabClick={handleTabClick} />
 
-                <div className="flex flex-col lg:flex-row gap-6 mt-6 items-start">
+                <div className="profile-content-grid flex flex-col lg:flex-row gap-6 mt-6 items-start">
                     <ProfileGameHistory
                         history={history}
                         total={historyTotal}

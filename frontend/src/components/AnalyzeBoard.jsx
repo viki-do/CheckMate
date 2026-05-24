@@ -2038,7 +2038,7 @@ const handleExternalDrop = (e, row, col) => {
     };
 
     return (
-        <div className="flex min-h-dvh w-full flex-col items-center bg-[#302f2c] text-[#bab9b8] px-3 py-3 gap-4 overflow-y-auto overflow-x-hidden select-none font-sans md:h-dvh md:flex-row md:justify-center md:px-4 md:py-4 md:gap-4 md:overflow-hidden xl:gap-6 xl:px-6"
+        <div className="analysis-shell flex min-h-dvh w-full flex-col items-center bg-[#302f2c] text-[#bab9b8] px-3 py-3 gap-4 overflow-y-auto overflow-x-hidden select-none font-sans md:h-dvh md:flex-row md:justify-center md:px-4 md:py-4 md:gap-4 md:overflow-hidden xl:gap-6 xl:px-6"
             onDragOver={(e) => {
                 // Ez engedélyezi, hogy az egész képernyőn kövessük az egeret
                 e.preventDefault();

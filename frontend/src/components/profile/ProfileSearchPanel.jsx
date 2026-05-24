@@ -47,7 +47,7 @@ const ProfileSearchPanel = ({
     onStartDateSelect,
     onEndDateSelect,
 }) => (
-    <div className="w-full lg:w-[320px] flex flex-col gap-4">
+    <div className="profile-search-panel w-full lg:w-[320px] flex flex-col gap-4">
         <div className="bg-[#262421] p-5 rounded-lg border border-[#3c3a37] h-auto flex flex-col relative">
             <h3 className="font-bold text-white text-[15px] mb-4">Search Games</h3>
 

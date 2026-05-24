@@ -49,7 +49,7 @@ export const StatListItem = ({ icon, label, value, color = "text-[#8b8987]", has
     </div>
 );
 export const PlayButton = ({ icon, iconSrc, label, onClick, isMain }) => (
-    <button onClick={onClick} className="flex items-center gap-4 px-5 h-[79px] rounded-lg bg-[#262421] hover:bg-[#2b2926] border border-[#3c3a37] transition-all group w-full">
+    <button onClick={onClick} className="home-play-button flex items-center gap-4 px-5 h-[79px] rounded-lg bg-[#262421] hover:bg-[#2b2926] border border-[#3c3a37] transition-all group w-full">
         {iconSrc ? (
             <img src={iconSrc} alt="" className={`w-8 h-8 object-contain ${isMain ? '' : 'opacity-75 group-hover:opacity-100'}`} />
         ) : (
@@ -60,11 +60,11 @@ export const PlayButton = ({ icon, iconSrc, label, onClick, isMain }) => (
 );
 
 export const BoardCard = ({ children, label, onClick }) => (
-    <div onClick={onClick} className="bg-[#262421] rounded-lg overflow-hidden cursor-pointer group border border-[#3c3a37] h-[340px] w-[288px] flex flex-col transition-all hover:border-[#4a4845]">
-        <div className="w-[288px] h-[288px] relative overflow-hidden flex items-center justify-center bg-[#312e2b]">
+    <div onClick={onClick} className="home-board-card bg-[#262421] rounded-lg overflow-hidden cursor-pointer group border border-[#3c3a37] h-[340px] w-[288px] flex flex-col transition-all hover:border-[#4a4845]">
+        <div className="home-board-card-board w-[288px] h-[288px] relative overflow-hidden flex items-center justify-center bg-[#312e2b]">
             {children}
         </div>
-        <div className="h-[52px] w-full flex items-center justify-center bg-[#262421] text-sm font-bold text-white group-hover:bg-[#2b2926] border-t border-[#3c3a37]">
+        <div className="home-board-card-label h-[52px] w-full flex items-center justify-center bg-[#262421] text-sm font-bold text-white group-hover:bg-[#2b2926] border-t border-[#3c3a37]">
             {label}
         </div>
     </div>

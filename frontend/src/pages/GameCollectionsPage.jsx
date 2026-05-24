@@ -771,7 +771,7 @@ const GameCollectionsPage = () => {
     };
 
     return (
-        <div className="flex min-h-dvh w-full flex-col items-center bg-[#302f2c] text-[#bab9b8] px-3 py-3 gap-4 overflow-y-auto overflow-x-hidden select-none font-sans md:h-dvh md:flex-row md:justify-center md:px-4 md:py-4 md:gap-4 md:overflow-hidden xl:gap-6 xl:px-6">
+        <div className="analysis-shell flex min-h-dvh w-full flex-col items-center bg-[#302f2c] text-[#bab9b8] px-3 py-3 gap-4 overflow-y-auto overflow-x-hidden select-none font-sans md:h-dvh md:flex-row md:justify-center md:px-4 md:py-4 md:gap-4 md:overflow-hidden xl:gap-6 xl:px-6">
             <AnalyzeEvalBar whiteBarHeight={51} currentEvalValue={0.4} />
             <StaticBoardSection />
             {selectedCollection ? (

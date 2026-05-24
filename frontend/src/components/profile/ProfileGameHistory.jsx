@@ -1,7 +1,7 @@
 import ProfileGameRow from './ProfileGameRow';
 
 const ProfileGameHistory = ({ history, total, isLoading, username, archiveMode, onSeeMore }) => (
-    <div className="flex-1 bg-[#262421] rounded-lg border border-[#3c3a37] overflow-hidden flex flex-col">
+    <div className="profile-game-history flex-1 bg-[#262421] rounded-lg border border-[#3c3a37] overflow-hidden flex flex-col">
         <div className="p-4 border-b border-[#3c3a37] bg-[#2b2926] flex justify-between items-center text-white">
             <h3 className="font-bold text-lg">Game History ({total ?? history.length})</h3>
             <div className="flex gap-4 text-[#666]">
