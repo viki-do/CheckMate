@@ -44,6 +44,63 @@ def get_engine():
             raise e
     return engine_singleton
 
+PIECE_VALUES = {
+    chess.PAWN: 100,
+    chess.KNIGHT: 320,
+    chess.BISHOP: 330,
+    chess.ROOK: 500,
+    chess.QUEEN: 900,
+    chess.KING: 0,
+}
+
+def choose_fallback_bot_move(board: chess.Board, elo: int = 800):
+    legal_moves = list(board.legal_moves)
+    if not legal_moves:
+        return None
+
+    scored_moves = []
+    for move in legal_moves:
+        score = random.uniform(-15, 15)
+        if board.is_capture(move):
+            captured = board.piece_at(move.to_square)
+            attacker = board.piece_at(move.from_square)
+            if captured:
+                score += PIECE_VALUES.get(captured.piece_type, 0)
+            if attacker:
+                score -= PIECE_VALUES.get(attacker.piece_type, 0) * 0.12
+        if move.promotion:
+            score += PIECE_VALUES.get(move.promotion, 0)
+
+        board.push(move)
+        if board.is_checkmate():
+            score += 100000
+        elif board.is_check():
+            score += 60
+        board.pop()
+
+        scored_moves.append((score, move))
+
+    scored_moves.sort(key=lambda item: item[0], reverse=True)
+    if elo < 700:
+        pool_size = min(len(scored_moves), 8)
+    elif elo < 1200:
+        pool_size = min(len(scored_moves), 5)
+    else:
+        pool_size = min(len(scored_moves), 3)
+    return random.choice(scored_moves[:pool_size])[1]
+
+def get_bot_move_with_optional_engine(board: chess.Board, bot_style: str, bot_elo: int, bot_id: str):
+    try:
+        engine = get_engine()
+        pure_stockfish = bot_style in {"stockfish", "engine", "top_player"} or bot_id == "engine"
+        configure_engine_for_elo(engine, bot_elo)
+        limit_params = get_bot_limit_params(bot_elo, pure_stockfish)
+        analysis = engine.analyse(board, chess.engine.Limit(**limit_params), multipv=5)
+        return choose_styled_bot_move(board, analysis, bot_style, bot_elo), analysis
+    except Exception as exc:
+        print(f"Stockfish unavailable, using fallback bot move: {exc}")
+        return choose_fallback_bot_move(board, bot_elo), []
+
 def get_db():
     db = SessionLocal()
     try:
@@ -705,18 +762,18 @@ async def create_game(request: Request, data: dict, user_id: str = Depends(get_c
 
         # --- BOT LÉPÉSE (HA A USER FEKETE, A BOT KEZD FEHÉRREL) ---
         if chosen_color == "black":
-            engine = get_engine()
+            bot_move, _analysis = get_bot_move_with_optional_engine(
+                board,
+                str(bot_style or "universal").lower(),
+                bot_elo,
+                str(bot_id or "engine").lower(),
+            )
             
             # Konfigurálás
-            configure_engine_for_elo(engine, bot_elo)
             
             # Időlimit meghatározása
-            pure_stockfish = bot_style in {"stockfish", "engine", "top_player"} or bot_id == "engine"
-            limit_params = get_bot_limit_params(bot_elo, pure_stockfish)
             
             # Bot lép
-            analysis = engine.analyse(board, chess.engine.Limit(**limit_params), multipv=5)
-            bot_move = choose_styled_bot_move(board, analysis, bot_style, bot_elo)
             
             move_san = board.san(bot_move)
             fen_elotte = board.fen()
@@ -923,19 +980,10 @@ async def make_move(request: Request, data: dict, user_id: str = Depends(get_cur
             # Aszinkron várakozás, nem blokkolja a szervert
             await asyncio.sleep(think_time)
 
-            engine = get_engine()
             bot_elo = game_rec.bot_elo or 1500
             bot_id = str(game_rec.bot_id).lower()
             bot_style = (game_rec.bot_style or "universal").lower()
-            
-            pure_stockfish = bot_style in {"stockfish", "engine", "top_player"} or bot_id == "engine"
-            configure_engine_for_elo(engine, bot_elo)
-            
-            limit_params = get_bot_limit_params(bot_elo, pure_stockfish)
-            
-            analysis = engine.analyse(board, chess.engine.Limit(**limit_params), multipv=5)
-            
-            chosen_move = choose_styled_bot_move(board, analysis, bot_style, bot_elo)
+            chosen_move, analysis = get_bot_move_with_optional_engine(board, bot_style, bot_elo, bot_id)
                         
             if chosen_move:
                 bot_res["san"] = board.san(chosen_move)
