@@ -2,8 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { PiecePawn } from "../components/icons/Icons";
-
-const API_BASE = "http://localhost:8000";
+import { API_BASE } from "../config/api";
 
 const sidebarItems = [
     { label: "Board & Pieces", icon: "fa-chess-board" },
@@ -242,8 +241,8 @@ const SettingsProfilePage = () => {
                     <h1 className="text-[30px] font-black tracking-tight">Settings</h1>
                 </div>
 
-                <div className="bg-[#242320] rounded-md min-h-[660px] shadow-sm flex overflow-hidden">
-                    <aside className="w-[290px] shrink-0 border-r border-[#3c3a37] py-9">
+                <div className="bg-[#242320] rounded-md min-h-[660px] shadow-sm flex flex-col overflow-hidden lg:flex-row">
+                    <aside className="w-full shrink-0 border-b border-[#3c3a37] py-5 lg:w-[290px] lg:border-b-0 lg:border-r lg:py-9">
                         <div className="px-7 mb-6">
                             <div className="h-[46px] bg-[#363532] border border-[#504e4a] rounded-md flex items-center px-3.5 gap-3 text-[#989795]">
                                 <i className="fas fa-search text-xl"></i>
@@ -251,14 +250,14 @@ const SettingsProfilePage = () => {
                             </div>
                         </div>
 
-                        <nav className="flex flex-col">
+                        <nav className="flex overflow-x-auto lg:flex-col">
                             {sidebarItems.map((item) => (
                                 <button
                                     key={item.label}
                                     onClick={() => {
                                         if (item.label === "Account") navigate("/settings/account");
                                     }}
-                                    className={`h-[56px] px-7 flex items-center gap-3.5 text-left text-[15px] font-bold transition-colors relative ${item.active ? "bg-[#302f2c] text-white" : "text-[#d7d6d4] hover:bg-[#2c2b28]"}`}
+                                    className={`h-[56px] px-5 lg:px-7 flex shrink-0 items-center gap-3.5 text-left text-[15px] font-bold transition-colors relative ${item.active ? "bg-[#302f2c] text-white" : "text-[#d7d6d4] hover:bg-[#2c2b28]"}`}
                                 >
                                     {item.Icon ? (
                                         <item.Icon size={26} className={`w-6 ${item.active ? "text-white" : "text-[#989795]"}`} />
@@ -272,7 +271,7 @@ const SettingsProfilePage = () => {
                         </nav>
                     </aside>
 
-                    <section className="flex-1 px-10 py-10 overflow-hidden">
+                    <section className="flex-1 px-5 py-7 overflow-y-auto lg:px-10 lg:py-10">
                         <div className="max-w-[790px]">
                             <h2 className="text-[25px] font-black mb-3">Public Profile</h2>
                             <p className="text-[#989795] text-[14px] leading-tight max-w-[640px] mb-7 font-semibold">

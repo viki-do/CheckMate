@@ -9,7 +9,7 @@ const PlaySelectionPanel = () => {
     const handlePlayBots = context?.handlePlayBotsMenuClick;
 
     return (
-        <div className="w-112.5 h-180 bg-[#262421] rounded-xl border border-chess-bg overflow-hidden flex flex-col font-sans">
+        <div className="h-full w-full bg-[#262421] rounded-xl border border-chess-bg overflow-hidden flex flex-col font-sans">
             <div className="p-5 border-b border-[#1b1a18] bg-chess-panel-header flex items-center justify-center gap-3">
                 <img src="/assets/logos/play.png" className="w-12 h-12" alt="king" />
                 <h2 className="text-2xl font-bold text-white">Play Chess</h2>

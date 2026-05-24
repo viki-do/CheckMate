@@ -13,6 +13,7 @@ import os
 import asyncio
 import random
 from pathlib import Path
+from shutil import which
 from .analysis_engine import ChessCoachEngine
 
 router = APIRouter(tags=["Chess Game"])
@@ -21,7 +22,16 @@ coach = ChessCoachEngine()
 # Globális változó a motornak
 engine_singleton = None
 
-STOCKFISH_PATH = str(Path(__file__).resolve().parents[1] / "engine" / "stockfish.exe")
+def resolve_stockfish_path():
+    env_path = os.getenv("STOCKFISH_PATH")
+    if env_path:
+        return env_path
+    system_path = which("stockfish")
+    if system_path:
+        return system_path
+    return str(Path(__file__).resolve().parents[1] / "engine" / "stockfish.exe")
+
+STOCKFISH_PATH = resolve_stockfish_path()
 OPENING_BOOK = {}
 
 def get_engine():

@@ -3,8 +3,7 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { PiecePawn } from "../components/icons/Icons";
 import { PASSWORD_REQUIREMENTS_MESSAGE, passwordMeetsRequirements } from "../utils/passwordValidation";
-
-const API_BASE = "http://localhost:8000";
+import { API_BASE } from "../config/api";
 
 const sidebarItems = [
     { label: "Board & Pieces", icon: "fa-chess-board" },
@@ -20,7 +19,7 @@ const sidebarItems = [
 ];
 
 const PasswordField = ({ value, onChange, visible, onToggle, hasError = false }) => (
-    <div className="relative w-[345px]">
+    <div className="relative w-full max-w-[345px]">
         <input
             type={visible ? "text" : "password"}
             value={value}
@@ -165,7 +164,7 @@ const SettingsAccountPage = () => {
     };
 
     return (
-        <div className="min-h-screen bg-[#2c2a27] text-white px-6 py-5">
+        <div className="min-h-screen bg-[#2c2a27] text-white px-4 py-5 md:px-6">
             <div className="max-w-[1380px] mx-auto">
                 <div className="flex items-center gap-3 mb-5">
                     <div className="w-12 h-12 rounded-full bg-[#d7d6d4] text-[#454241] flex items-center justify-center shadow-inner">
@@ -174,8 +173,8 @@ const SettingsAccountPage = () => {
                     <h1 className="text-[30px] font-black tracking-tight">Settings</h1>
                 </div>
 
-                <div className="bg-[#242320] rounded-md min-h-[660px] shadow-sm flex overflow-hidden">
-                    <aside className="w-[290px] shrink-0 border-r border-[#3c3a37] py-9">
+                <div className="bg-[#242320] rounded-md min-h-[660px] shadow-sm flex flex-col overflow-hidden lg:flex-row">
+                    <aside className="w-full shrink-0 border-b border-[#3c3a37] py-5 lg:w-[290px] lg:border-b-0 lg:border-r lg:py-9">
                         <div className="px-7 mb-6">
                             <div className="h-[46px] bg-[#363532] border border-[#504e4a] rounded-md flex items-center px-3.5 gap-3 text-[#989795]">
                                 <i className="fas fa-search text-xl"></i>
@@ -183,7 +182,7 @@ const SettingsAccountPage = () => {
                             </div>
                         </div>
 
-                        <nav className="flex flex-col">
+                        <nav className="flex overflow-x-auto lg:flex-col">
                             {sidebarItems.map((item) => (
                                 <button
                                     key={item.label}
@@ -191,7 +190,7 @@ const SettingsAccountPage = () => {
                                         if (item.label === "Profile") navigate("/settings/profile");
                                         if (item.label === "Account") navigate("/settings/account");
                                     }}
-                                    className={`h-[56px] px-7 flex items-center gap-3.5 text-left text-[15px] font-bold transition-colors relative ${item.active ? "bg-[#302f2c] text-white" : "text-[#d7d6d4] hover:bg-[#2c2b28]"}`}
+                                    className={`h-[56px] px-5 lg:px-7 flex shrink-0 items-center gap-3.5 text-left text-[15px] font-bold transition-colors relative ${item.active ? "bg-[#302f2c] text-white" : "text-[#d7d6d4] hover:bg-[#2c2b28]"}`}
                                 >
                                     {item.Icon ? (
                                         <item.Icon size={26} className={`w-6 ${item.active ? "text-white" : "text-[#989795]"}`} />
@@ -205,7 +204,7 @@ const SettingsAccountPage = () => {
                         </nav>
                     </aside>
 
-                    <section className="flex-1 px-12 py-11 overflow-y-auto">
+                    <section className="flex-1 px-5 py-7 overflow-y-auto lg:px-12 lg:py-11">
                         <div className="max-w-[840px]">
                             <h2 className="text-[25px] font-black mb-3">Account</h2>
                             <p className="text-[#989795] text-[14px] leading-tight mb-8 font-semibold">
@@ -215,7 +214,7 @@ const SettingsAccountPage = () => {
                             <h3 className="text-[25px] font-black mb-10">Change Password</h3>
                             <AlertBanner type={notice.type} text={notice.text} />
                             <div className="flex flex-col gap-3.5 max-w-[650px]">
-                                <div className="grid grid-cols-[220px_345px] items-center gap-8">
+                                <div className="grid grid-cols-1 items-start gap-2 md:grid-cols-[220px_minmax(0,345px)] md:items-center md:gap-8">
                                     <label className="text-white text-[14px] font-bold">Current password</label>
                                     <PasswordField
                                         value={currentPassword}
@@ -225,7 +224,7 @@ const SettingsAccountPage = () => {
                                         hasError={fieldHasError("current")}
                                     />
                                 </div>
-                                <div className="grid grid-cols-[220px_345px] items-center gap-8">
+                                <div className="grid grid-cols-1 items-start gap-2 md:grid-cols-[220px_minmax(0,345px)] md:items-center md:gap-8">
                                     <label className="text-white text-[14px] font-bold">New password</label>
                                     <PasswordField
                                         value={newPassword}
@@ -235,7 +234,7 @@ const SettingsAccountPage = () => {
                                         hasError={fieldHasError("new")}
                                     />
                                 </div>
-                                <div className="grid grid-cols-[220px_345px] items-center gap-8">
+                                <div className="grid grid-cols-1 items-start gap-2 md:grid-cols-[220px_minmax(0,345px)] md:items-center md:gap-8">
                                     <label className="text-white text-[14px] font-bold">Retype password</label>
                                     <PasswordField
                                         value={retypePassword}
@@ -251,7 +250,7 @@ const SettingsAccountPage = () => {
                                 <button
                                     onClick={savePassword}
                                     disabled={!canAttemptSave}
-                                    className={`w-[210px] h-[46px] rounded-md font-black text-[15px] transition-all bg-gradient-to-b from-[#3a3936] to-[#2d2c29] shadow-sm ${
+                                    className={`w-full max-w-[210px] h-[46px] rounded-md font-black text-[15px] transition-all bg-gradient-to-b from-[#3a3936] to-[#2d2c29] shadow-sm ${
                                         canAttemptSave ? "text-white hover:from-[#45433f] hover:to-[#343330]" : "text-[#8b8987] opacity-70"
                                     }`}
                                 >
@@ -268,7 +267,7 @@ const SettingsAccountPage = () => {
 
                             <div className="border-t border-[#3c3a37] mt-11 pt-11">
                                 <h3 className="text-[25px] font-black mb-10">Contact Info</h3>
-                                <div className="grid grid-cols-[220px_220px_210px] items-center gap-8">
+                                <div className="grid grid-cols-1 items-start gap-3 md:grid-cols-[220px_220px_210px] md:items-center md:gap-8">
                                     <div className="text-white text-[14px] font-bold">Email Address</div>
                                     <div className="text-[#bab9b8] text-[14px] font-black tracking-wide">{maskedEmail || "No email"}</div>
                                     <button className="h-[46px] rounded-md bg-gradient-to-b from-[#3a3936] to-[#2d2c29] text-[#d7d6d4] font-black text-[15px] shadow-sm hover:from-[#45433f] hover:to-[#343330]">

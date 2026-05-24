@@ -1,7 +1,9 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import axios from 'axios';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
+import DemoExpiredPage from './pages/DemoExpiredPage';
 import GameBoard from './pages/GameBoard';
 import ProfilePage from './pages/ProfilePage';
 import Navbar from './components/Navbar';
@@ -26,6 +28,26 @@ const App = () => {
     //A központi Context-ből kérjük el az inicializálót
     const { initializeGame } = useChess();
 
+    useEffect(() => {
+        const interceptor = axios.interceptors.response.use(
+            (response) => response,
+            (error) => {
+                if (error?.response?.status === 403 && error?.response?.data?.detail === 'Demo mode has expired') {
+                    localStorage.removeItem('chessToken');
+                    localStorage.removeItem('chessUsername');
+                    localStorage.removeItem('chessUserId');
+                    localStorage.removeItem('chessMode');
+                    localStorage.removeItem('chessDemoExpiresAt');
+                    if (window.location.pathname !== '/demo-expired') {
+                        window.location.assign('/demo-expired');
+                    }
+                }
+                return Promise.reject(error);
+            }
+        );
+        return () => axios.interceptors.response.eject(interceptor);
+    }, []);
+
     // Automatikus inicializálás az oldal betöltésekor
     useEffect(() => {
         if (isAuthenticated) {
@@ -36,11 +58,11 @@ const App = () => {
 
     return (
         <Router>
-            <div className="flex min-h-screen bg-[#1e1e1e]">
+            <div className="flex min-h-dvh bg-[#1e1e1e]">
                 {/* A Navbar csak bejelentkezett felhasználóknak látszik */}
                 {isAuthenticated && <Navbar />}
 
-                <main className={`flex-1 ${isAuthenticated ? 'overflow-y-auto h-screen' : ''}`}>
+                <main className={`min-w-0 flex-1 ${isAuthenticated ? 'h-dvh overflow-y-auto pb-20 md:pb-0' : ''}`}>
                     <Routes>
                         {/* --- PUBLIKUS ÚTVONALAK --- */}
                         <Route 
@@ -50,6 +72,14 @@ const App = () => {
                         <Route 
                             path="/register" 
                             element={!isAuthenticated ? <RegisterPage /> : <Navigate to="/home" />} 
+                        />
+                        <Route 
+                            path="/demo/:demoToken" 
+                            element={!isAuthenticated ? <RegisterPage /> : <Navigate to="/home" />} 
+                        />
+                        <Route 
+                            path="/demo-expired" 
+                            element={<DemoExpiredPage />} 
                         />
 
                         {/* --- VÉDETT ÚTVONALAK --- */}

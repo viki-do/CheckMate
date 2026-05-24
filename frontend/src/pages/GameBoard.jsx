@@ -675,13 +675,13 @@ const GameBoard = () => {
     };
 
     return (
-        <div className="flex justify-center items-center h-screen w-full bg-[#1e1e1e] gap-6 p-4 overflow-hidden select-none relative">
+        <div className="flex min-h-dvh w-full flex-col items-center justify-start bg-[#1e1e1e] gap-4 p-3 overflow-y-auto overflow-x-hidden select-none relative md:h-dvh md:flex-row md:justify-center md:p-4 md:overflow-hidden xl:gap-6">
             {!shouldShowEvalBar && <CapturedProgressBar />}
             {shouldShowEvalBar && (
                 <AnalyzeEvalBar whiteBarHeight={whiteBarHeight} currentEvalValue={currentEvalValue} />
             )}
 
-            <div className="flex flex-col justify-center items-center h-full shrink-0">
+            <div className="flex w-full flex-col items-center justify-center shrink-0 md:h-full md:w-auto">
                 <PlayerInfoBar
                     type="top"
                     opponent={opponent}
@@ -723,7 +723,7 @@ const GameBoard = () => {
                 />
             </div>
 
-            <div className="w-112.5 shrink-0 h-170 self-center flex flex-col">
+            <div className="app-panel-size shrink-0 self-center flex flex-col">
                 <Outlet context={{ 
                 ...gameLogic, 
                 startNewGame: handleStartNewGame,

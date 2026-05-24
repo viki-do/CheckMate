@@ -5,8 +5,7 @@ import ProfileGameHistory from '../components/profile/ProfileGameHistory';
 import ProfileHeader from '../components/profile/ProfileHeader';
 import ProfileSearchPanel from '../components/profile/ProfileSearchPanel';
 import ProfileTabs from '../components/profile/ProfileTabs';
-
-const API_BASE = "http://localhost:8000";
+import { API_BASE } from '../config/api';
 
 const ProfilePage = ({ archiveMode = false }) => {
     const { username: urlUsername } = useParams();

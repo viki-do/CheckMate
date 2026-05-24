@@ -57,7 +57,7 @@ const MoveListPanel = ({
     }
 
     return (
-        <div className="w-112.5 h-185 bg-[#262421] flex flex-col font-sans border border-chess-bg rounded-xl overflow-hidden shadow-2xl">
+        <div className="h-full w-full bg-[#262421] flex flex-col font-sans border border-chess-bg rounded-xl overflow-hidden shadow-2xl">
             {!isArchiveGame && <AccuracyHeader analysisData={analysisData} />}
             <OpeningHeader opening={opening} />
 

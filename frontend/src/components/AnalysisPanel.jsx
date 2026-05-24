@@ -14,6 +14,11 @@ import {
     getCurrentMoveData,
     getDisplayLines,
 } from './analysis-panel/analysisPanelUtils';
+import {
+    addGamesToCollection as addGamesToDbCollection,
+    createCollection as createDbCollection,
+    loadCollections,
+} from '../services/collectionsService';
 
 const COLLECTIONS_STORAGE_KEY = 'checkmate_game_collections';
 const PUBLIC_ID_CHARS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -103,43 +108,9 @@ const buildHistoryCollectionGame = ({ game, history = [], details = {}, username
     };
 };
 
-const addGamesToCollection = (collectionIdentifier, gamesToAdd) => {
-    const collections = readCollections();
-    let targetCollection = null;
-    const updatedCollections = collections.map((collection) => {
-        const isTarget = collection.id === collectionIdentifier
-            || collection.publicId === collectionIdentifier
-            || getCollectionSlug(collection) === collectionIdentifier;
-        if (!isTarget) return collection;
-        const existingGames = getCollectionGames(collection);
-        const nextGames = [...existingGames];
-
-        gamesToAdd.forEach((game) => {
-            const existingIndex = nextGames.findIndex((savedGame) => String(savedGame.id) === String(game.id));
-            if (existingIndex >= 0) {
-                nextGames[existingIndex] = {
-                    ...game,
-                    addedAt: nextGames[existingIndex].addedAt || game.addedAt,
-                    updatedAt: new Date().toISOString(),
-                };
-            } else {
-                nextGames.unshift(game);
-            }
-        });
-
-        targetCollection = {
-            ...collection,
-            games: nextGames,
-            gameCount: nextGames.length,
-            updatedAt: new Date().toISOString(),
-        };
-        return targetCollection;
-    });
-
-    writeCollections(updatedCollections);
-    window.dispatchEvent(new CustomEvent('checkmate:collections-updated'));
-    return targetCollection;
-};
+const addGamesToCollection = (collectionIdentifier, gamesToAdd) => (
+    addGamesToDbCollection(collectionIdentifier, gamesToAdd)
+);
 
 const formatCollectionDate = (value) => {
     const timestamp = Date.parse(value || '');
@@ -395,7 +366,7 @@ const BulkAddCollectionModal = ({ isOpen, gamesToAdd, onClose, onSaved }) => {
 
     useEffect(() => {
         if (!isOpen) return;
-        setCollections(readCollections());
+        loadCollections().then(setCollections);
         setFilter('');
         setIsCreatingCollection(false);
         setNewCollectionName('');
@@ -409,18 +380,18 @@ const BulkAddCollectionModal = ({ isOpen, gamesToAdd, onClose, onSaved }) => {
 
     if (!isOpen) return null;
 
-    const saveToCollection = (collectionId) => {
-        const targetCollection = addGamesToCollection(collectionId, gamesToAdd);
+    const saveToCollection = async (collectionId) => {
+        const targetCollection = await addGamesToCollection(collectionId, gamesToAdd);
         if (!targetCollection) return;
         onSaved?.(targetCollection);
         onClose();
         navigate(`/analysis/collection/${getCollectionSlug(targetCollection)}/games`);
     };
 
-    const createCollection = () => {
+    const createCollection = async () => {
         const name = newCollectionName.trim();
         if (name.length < 2) return;
-        const newCollection = {
+        const newCollection = await createDbCollection({
             id: crypto.randomUUID(),
             publicId: createPublicId(),
             name,
@@ -431,10 +402,8 @@ const BulkAddCollectionModal = ({ isOpen, gamesToAdd, onClose, onSaved }) => {
             gameCount: 0,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
-        };
-        const updatedCollections = [newCollection, ...collections];
-        setCollections(updatedCollections);
-        writeCollections(updatedCollections);
+        });
+        setCollections((prev) => [newCollection, ...prev.filter((collection) => collection.id !== newCollection.id)]);
         setNewCollectionName('');
         setIsCreatingCollection(false);
     };
@@ -442,7 +411,7 @@ const BulkAddCollectionModal = ({ isOpen, gamesToAdd, onClose, onSaved }) => {
     return (
         <div className="fixed inset-0 z-[6000] flex items-center justify-center">
             <button type="button" aria-label="Close add to collection" onClick={onClose} className="absolute inset-0 bg-black/75" />
-            <div className="relative w-[420px] h-[460px] rounded-lg bg-[#272522] border border-[#3a3936] shadow-2xl overflow-hidden flex flex-col">
+            <div className="relative h-[min(460px,calc(100dvh-32px))] w-[min(420px,calc(100vw-32px))] rounded-lg bg-[#272522] border border-[#3a3936] shadow-2xl overflow-hidden flex flex-col">
                 <div className="h-[52px] px-4 flex items-center justify-between bg-[#1f1e1b] shrink-0">
                     <h2 className="text-white text-[18px] font-semibold">Add to Collection</h2>
                     <button type="button" onClick={onClose} className="text-[#8f8e8b] hover:text-white">
@@ -621,7 +590,7 @@ const LoadGameHistoryView = ({ apiBase, token, onBack, onLoadGame }) => {
 
             if (!selectedGames.length) return;
             if (targetCollectionSlug) {
-                const updatedCollection = addGamesToCollection(targetCollectionSlug, selectedGames);
+                const updatedCollection = await addGamesToCollection(targetCollectionSlug, selectedGames);
                 if (updatedCollection) {
                     navigate(`/analysis/collection/${getCollectionSlug(updatedCollection)}/games`);
                     return;
@@ -859,7 +828,7 @@ const AnalysisPanel = ({
     };
 
     return (
-        <div className="relative w-[480px] h-[744px] bg-[#262421] rounded-lg flex flex-col shadow-xl border border-[#3c3a37] overflow-hidden font-sans">
+        <div className="app-panel-size relative bg-[#262421] rounded-lg flex flex-col shadow-xl border border-[#3c3a37] overflow-hidden font-sans">
             {collectionContext && showCollectionSettings ? (
                 <CollectionSettingsView
                     collectionContext={collectionContext}

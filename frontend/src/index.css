@@ -132,3 +132,63 @@
     -webkit-user-drag: none;
     user-select: none;
 }
+
+.app-board-size {
+  width: min(680px, calc(100vw - 32px));
+  height: min(680px, calc(100vw - 32px));
+}
+
+.app-board-width {
+  width: min(680px, calc(100vw - 32px));
+}
+
+.app-board-height {
+  height: min(680px, calc(100vw - 32px));
+}
+
+.app-panel-size {
+  width: min(480px, calc(100vw - 32px));
+  height: min(744px, calc(100dvh - 96px));
+}
+
+@media (min-width: 768px) {
+  .app-board-size {
+    width: min(720px, calc(100dvh - 150px), calc((100vw - 600px) * 0.9));
+    height: min(720px, calc(100dvh - 150px), calc((100vw - 600px) * 0.9));
+  }
+
+  .app-board-width {
+    width: min(720px, calc(100dvh - 150px), calc((100vw - 600px) * 0.9));
+  }
+
+  .app-board-height {
+    height: min(720px, calc(100dvh - 150px), calc((100vw - 600px) * 0.9));
+  }
+
+  .app-panel-size {
+    width: min(520px, calc(100vw - 820px));
+    min-width: 360px;
+    height: min(744px, calc(100dvh - 32px));
+  }
+}
+
+@media (min-width: 1280px) {
+  .app-board-size {
+    width: min(800px, calc(100dvh - 160px));
+    height: min(800px, calc(100dvh - 160px));
+  }
+
+  .app-board-width {
+    width: min(800px, calc(100dvh - 160px));
+  }
+
+  .app-board-height {
+    height: min(800px, calc(100dvh - 160px));
+  }
+
+  .app-panel-size {
+    width: 540px;
+    min-width: 540px;
+    height: min(880px, calc(100dvh - 24px));
+  }
+}

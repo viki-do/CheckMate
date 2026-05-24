@@ -6,6 +6,7 @@ import React , { useMemo } from 'react';
 import { Chess } from 'chess.js';
 import GameHistoryTypeIcon from '../components/game-history/GameHistoryTypeIcon';
 import ReviewAccuracyButton from '../components/game-history/ReviewAccuracyButton';
+import { API_BASE, assetUrl } from '../config/api';
 
 const COLLECTIONS_STORAGE_KEY = 'checkmate_game_collections';
 
@@ -105,12 +106,12 @@ const HomePage = () => {
     const [isHistoryLoading, setIsHistoryLoading] = React.useState(false);
     const [avatarUrl, setAvatarUrl] = React.useState("");
     const username = localStorage.getItem('chessUsername');
-    const avatarSrc = avatarUrl ? `http://localhost:8000${avatarUrl}` : "";
+    const avatarSrc = avatarUrl ? assetUrl(avatarUrl) : "";
 
     React.useEffect(() => {
         const fetchLatest = async () => {
             try {
-                const res = await axios.get(`http://localhost:8000/get-latest-review-game`, {
+                const res = await axios.get(`${API_BASE}/get-latest-review-game`, {
                     headers: { Authorization: `Bearer ${localStorage.getItem('chessToken')}` }
                 });
                 setReviewGame(res.data);
@@ -127,7 +128,7 @@ const HomePage = () => {
         let isMounted = true;
         setIsHistoryLoading(true);
 
-        axios.get(`http://localhost:8000/user-games/${encodeURIComponent(username)}?offset=0&limit=5`)
+        axios.get(`${API_BASE}/user-games/${encodeURIComponent(username)}?offset=0&limit=5`)
             .then((res) => {
                 if (isMounted) setGameHistory(res.data.games || []);
             })
@@ -148,7 +149,7 @@ const HomePage = () => {
         const loadActivityDates = async () => {
             const localDates = [...getCollectionActivityDates(), ...getLocalActivityDates()];
             try {
-                const res = await axios.get(`http://localhost:8000/user-activity-dates/${encodeURIComponent(username)}`);
+                const res = await axios.get(`${API_BASE}/user-activity-dates/${encodeURIComponent(username)}`);
                 if (isMounted) setActivityDates([...(res.data.dates || []), ...localDates]);
             } catch {
                 if (isMounted) setActivityDates(localDates);
@@ -173,7 +174,7 @@ const HomePage = () => {
 
     React.useEffect(() => {
         let isMounted = true;
-        axios.get(`http://localhost:8000/profile`, {
+        axios.get(`${API_BASE}/profile`, {
             headers: { Authorization: `Bearer ${localStorage.getItem('chessToken')}` }
         }).then((res) => {
             if (isMounted) setAvatarUrl(res.data.avatar_url || "");
@@ -192,7 +193,7 @@ const HomePage = () => {
     const streakState = React.useMemo(() => buildStreakState(activityDates), [activityDates]);
 
     return (
-    <div className="flex flex-col p-10 bg-[#2f2e2a] min-h-screen font-sans text-[#bab9b8]">
+    <div className="flex flex-col p-4 md:p-8 lg:p-10 bg-[#2f2e2a] min-h-screen font-sans text-[#bab9b8]">
         
         {/* --- 1. FELHASZNÁLÓI FEJLÉC --- */}
         <div className="flex items-center gap-3 mb-10 w-fit">
@@ -222,8 +223,8 @@ const HomePage = () => {
         </div>
 
         {/* --- 2. FELSŐ DASHBOARD SZEKCIÓ --- */}
-        <div className="flex flex-row gap-8 items-start mb-12">
-            <div className="flex flex-col w-72">
+        <div className="grid grid-cols-1 gap-6 items-start mb-12 sm:grid-cols-2 xl:grid-cols-4 xl:gap-8">
+            <div className="flex flex-col w-full xl:w-72">
                 <div className="flex items-center gap-4 mb-6 h-16">
                     <img
                         src={`/assets/icons/${streakState.icon}`}
@@ -243,7 +244,7 @@ const HomePage = () => {
                 </div>
             </div>
 
-            <div className="flex flex-col w-72">
+            <div className="flex flex-col w-full xl:w-72">
                 <HeaderSection 
                     icon={<img src="https://www.chess.com/bundles/web/images/color-icons/puzzles.svg" className="w-16 h-16" alt="" />}
                     title="Puzzles" sub="200" extra="🔥 3"
@@ -253,7 +254,7 @@ const HomePage = () => {
                 </BoardCard>
             </div>
 
-            <div className="flex flex-col w-72">
+            <div className="flex flex-col w-full xl:w-72">
                 <HeaderSection 
                     icon={
                         <img 
@@ -269,7 +270,7 @@ const HomePage = () => {
                 </BoardCard>
             </div>
 
-            <div className="flex flex-col w-72">
+            <div className="flex flex-col w-full xl:w-72">
                 <HeaderSection 
                     icon={
                         <img 
@@ -470,7 +471,7 @@ const MiniChessBoard = ({ fen }) => {
     }, [fen]);
 
     return (
-        <div className="w-[288px] h-[288px] grid grid-cols-8 grid-rows-8 border-collapse">
+        <div className="aspect-square w-full max-w-[288px] grid grid-cols-8 grid-rows-8 border-collapse">
             {squares.map(({ square, piece, isDark }) => (
                 <div key={square} className={`aspect-square relative flex items-center justify-center ${isDark ? 'bg-[#769656]' : 'bg-[#eeeed2]'}`}>
                     {piece && (

@@ -34,6 +34,8 @@ class User(Base):
     first_name = Column(String(100), nullable=True)
     last_name = Column(String(100), nullable=True)
     avatar_url = Column(String(512), nullable=True)
+    is_demo = Column(Boolean, nullable=False, default=False, index=True)
+    demo_expires_at = Column(DateTime, nullable=True, index=True)
     created_at = Column(DateTime, server_default=func.now())
     
 class Game(Base):
@@ -141,3 +143,83 @@ class ImportedGamePlayerSource(Base):
     source_object_key = Column(String(512), nullable=True, index=True)
     source_game_id = Column(String(50), nullable=True, index=True)
     imported_at = Column(DateTime, server_default=func.now())
+
+
+class Collection(Base):
+    __tablename__ = "collections"
+    __table_args__ = (
+        UniqueConstraint("user_id", "public_id", name="uq_collections_user_public_id"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    public_id = Column(String(32), nullable=False, index=True)
+    name = Column(String(255), nullable=False)
+    privacy = Column(String(30), nullable=False, default="public")
+    participants_json = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+
+class CollectionGame(Base):
+    __tablename__ = "collection_games"
+    __table_args__ = (
+        UniqueConstraint("collection_id", "client_game_id", name="uq_collection_games_client_game_id"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    collection_id = Column(UUID(as_uuid=True), ForeignKey("collections.id", ondelete="CASCADE"), nullable=False, index=True)
+    client_game_id = Column(String(255), nullable=False, index=True)
+    source_type = Column(String(50), nullable=True)
+    source_id = Column(String(255), nullable=True, index=True)
+    payload_json = Column(Text, nullable=False)
+    added_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+
+class SavedAnalysis(Base):
+    __tablename__ = "saved_analyses"
+    __table_args__ = (
+        UniqueConstraint("user_id", "client_analysis_id", name="uq_saved_analyses_client_analysis_id"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    client_analysis_id = Column(String(255), nullable=False, index=True)
+    title = Column(String(255), nullable=True)
+    source_type = Column(String(50), nullable=True)
+    source_id = Column(String(255), nullable=True, index=True)
+    payload_json = Column(Text, nullable=False)
+    added_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+
+class AnalysisDraft(Base):
+    __tablename__ = "analysis_drafts"
+    __table_args__ = (
+        UniqueConstraint("user_id", "draft_key", name="uq_analysis_drafts_user_draft_key"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    draft_key = Column(String(64), nullable=False, default="current", index=True)
+    title = Column(String(255), nullable=True)
+    payload_json = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+
+class DemoAccess(Base):
+    __tablename__ = "demo_accesses"
+    __table_args__ = (
+        UniqueConstraint("token_hash", name="uq_demo_accesses_token_hash"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    token_hash = Column(String(64), nullable=False, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    duration_hours = Column(Integer, nullable=False, default=24)
+    expires_at = Column(DateTime, nullable=False, index=True)
+    revoked_at = Column(DateTime, nullable=True)
+    consumed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)

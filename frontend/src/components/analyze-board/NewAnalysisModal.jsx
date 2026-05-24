@@ -20,7 +20,7 @@ const NewAnalysisModal = ({ isOpen, onClose, onConfirm }) => {
                 initial={{ opacity: 0, scale: 0.9, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                className="relative w-[400px] bg-[#262421] rounded-xl shadow-2xl border border-[#3c3a37] p-8 overflow-hidden text-center"
+                className="relative w-[min(400px,calc(100vw-32px))] bg-[#262421] rounded-xl shadow-2xl border border-[#3c3a37] p-5 sm:p-8 overflow-hidden text-center"
             >
                 <button
                     onClick={onClose}

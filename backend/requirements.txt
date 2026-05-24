@@ -1,0 +1,14 @@
+authlib
+argon2-cffi
+boto3
+fastapi
+httpx
+passlib[argon2]
+psycopg2-binary
+pyjwt
+python-chess
+python-dotenv
+python-multipart
+python-socketio[asgi]
+sqlalchemy
+uvicorn[standard]

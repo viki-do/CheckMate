@@ -1,4 +1,4 @@
-export const API_BASE = 'http://localhost:8000';
+export { API_BASE } from '../config/api';
 
 export const playerImages = {
   'alexander alekhine': '/assets/Players/AlexanderAlekhine.avif',

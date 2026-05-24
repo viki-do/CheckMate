@@ -2,14 +2,19 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import { Mail, User, Lock, ChevronLeft } from 'lucide-react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useParams, useSearchParams } from 'react-router-dom';
 import { PASSWORD_REQUIREMENTS_MESSAGE, passwordMeetsRequirements } from '../utils/passwordValidation';
+import { API_BASE } from '../config/api';
 
 const RegisterPage = () => {
   const [regStep, setRegStep] = useState(1); // 1: Választás, 2: Adatmegadás
   const [registerForm, setRegisterForm] = useState({ username: '', email: '', password: '' });
   const [registerError, setRegisterError] = useState('');
   const navigate = useNavigate();
+  const { demoToken } = useParams();
+  const [searchParams] = useSearchParams();
+  const activeDemoToken = demoToken || searchParams.get('demo') || '';
+  const isDemoMode = Boolean(activeDemoToken);
 
   const handleRegister = async (e) => {
     e.preventDefault();
@@ -19,7 +24,10 @@ const RegisterPage = () => {
       return;
     }
     try {
-      await axios.post('http://localhost:8000/register', registerForm);
+      await axios.post(`${API_BASE}/register`, {
+        ...registerForm,
+        demo_token: activeDemoToken || undefined,
+      });
       alert("Sikeres regisztráció! Most már bejelentkezhetsz.");
       navigate('/login');
     } catch (err) {
@@ -29,7 +37,7 @@ const RegisterPage = () => {
   };
 
   const handleSocialLogin = (provider) => {
-    window.location.assign(`http://localhost:8000/auth/${provider}`);
+    window.location.assign(`${API_BASE}/auth/${provider}`);
   };
 
   const handlePasswordChange = (e) => {
@@ -44,10 +52,10 @@ const RegisterPage = () => {
   const socialBtnClasses = "flex items-center justify-center gap-3 w-full p-3 bg-[#454241] text-white rounded hover:bg-[#53504f] transition-colors duration-200 text-sm font-medium cursor-pointer";
 
   return (
-    <div className="fixed inset-0 flex flex-col items-center justify-center bg-[#262421] font-sans overflow-hidden">
+    <div className="fixed inset-0 flex flex-col items-center justify-center bg-[#262421] px-4 py-6 font-sans overflow-y-auto">
       
       {/* Jobb felső Log In link */}
-      <div className="absolute top-5 right-10">
+      <div className="absolute top-5 right-4 sm:right-10">
         <Link to="/login" className="text-white no-underline opacity-80 hover:opacity-100 transition-opacity">Log In</Link>
       </div>
 
@@ -62,7 +70,7 @@ const RegisterPage = () => {
       <motion.div 
         initial={{ opacity: 0, y: 10 }} 
         animate={{ opacity: 1, y: 0 }} 
-        className="w-[min(90%,450px)] text-center"
+        className="w-full max-w-[450px] text-center"
       >
         <AnimatePresence mode="wait">
           {/* --- 1. LÉPÉS: VÁLASZTÁS --- */}
@@ -74,7 +82,7 @@ const RegisterPage = () => {
               exit={{ opacity: 0, x: 20 }}
               className="flex flex-col items-center"
             >
-              <h2 className="text-white text-3xl font-bold mb-2">Create Your Account</h2>
+              <h2 className="text-white text-3xl font-bold mb-2">{isDemoMode ? 'Create Demo Account' : 'Create Your Account'}</h2>
               <img 
                 src="/assets/pieces/white_pawn.png" 
                 className="w-20 my-5 drop-shadow-[0_0_10px_#81b64c]" 
@@ -86,21 +94,25 @@ const RegisterPage = () => {
                   Continue with Email
                 </button>
                 
-                <div className="flex items-center gap-2.5 my-4 text-[#8b8987] text-sm select-none">
-                  <div className="flex-1 h-px bg-[#454241]"></div>
-                  OR
-                  <div className="flex-1 h-px bg-[#454241]"></div>
-                </div>
-                
-                <button onClick={() => handleSocialLogin('google')} className={socialBtnClasses}>
-                  <img src="/assets/logos/google.png" alt="google" className="w-5 h-5 object-contain pointer-events-none" />
-                  Continue with Google
-                </button>
+                {!isDemoMode && (
+                  <>
+                    <div className="flex items-center gap-2.5 my-4 text-[#8b8987] text-sm select-none">
+                      <div className="flex-1 h-px bg-[#454241]"></div>
+                      OR
+                      <div className="flex-1 h-px bg-[#454241]"></div>
+                    </div>
+                    
+                    <button onClick={() => handleSocialLogin('google')} className={socialBtnClasses}>
+                      <img src="/assets/logos/google.png" alt="google" className="w-5 h-5 object-contain pointer-events-none" />
+                      Continue with Google
+                    </button>
 
-                <button onClick={() => handleSocialLogin('github')} className={socialBtnClasses}>
-                  <img src="/assets/logos/github.svg" alt="github" className="w-5 h-5 object-contain invert pointer-events-none" />
-                  Continue with GitHub
-                </button>
+                    <button onClick={() => handleSocialLogin('github')} className={socialBtnClasses}>
+                      <img src="/assets/logos/github.svg" alt="github" className="w-5 h-5 object-contain invert pointer-events-none" />
+                      Continue with GitHub
+                    </button>
+                  </>
+                )}
               </div>
             </motion.div>
           )}
@@ -112,7 +124,7 @@ const RegisterPage = () => {
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
-              className="bg-chess-bg p-8 rounded-lg text-left shadow-xl"
+              className="bg-chess-bg p-5 sm:p-8 rounded-lg text-left shadow-xl"
             >
               <div 
                 className="flex items-center gap-1 mb-5 cursor-pointer text-[#8b8987] hover:text-white transition-colors"
@@ -121,7 +133,7 @@ const RegisterPage = () => {
                 <ChevronLeft size={20} /> <span className="text-sm font-medium">Back</span>
               </div>
               
-              <h2 className="text-white text-2xl font-bold mb-6">Sign up with Email</h2>
+              <h2 className="text-white text-2xl font-bold mb-6">{isDemoMode ? 'Start 24-hour demo' : 'Sign up with Email'}</h2>
               
               <form onSubmit={handleRegister} className="flex flex-col gap-3">
                 {registerError && (

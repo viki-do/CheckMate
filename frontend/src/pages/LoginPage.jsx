@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import axios from 'axios';
 import { User, Lock } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
+import { API_BASE } from '../config/api';
 
 const LoginPage = () => {
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
@@ -13,6 +14,7 @@ const LoginPage = () => {
     const token = params.get('token');
     const username = params.get('username');
     const userId = params.get('user_id');
+    const mode = params.get('mode');
     const error = params.get('error');
 
     if (error) {
@@ -25,6 +27,7 @@ const LoginPage = () => {
       localStorage.setItem('chessToken', token);
       localStorage.setItem('chessUsername', username);
       localStorage.setItem('chessUserId', userId);
+      if (mode) localStorage.setItem('chessMode', mode);
       window.history.replaceState({}, document.title, "/login");
       navigate('/home');
       window.location.reload(); 
@@ -34,10 +37,12 @@ const LoginPage = () => {
   const handleLogin = async (e) => {
     e.preventDefault();
     try {
-      const res = await axios.post('http://localhost:8000/login', loginForm);
+      const res = await axios.post(`${API_BASE}/login`, loginForm);
       localStorage.setItem('chessToken', res.data.access_token);
       localStorage.setItem('chessUsername', res.data.username);
       localStorage.setItem('chessUserId', res.data.user_id);
+      localStorage.setItem('chessMode', res.data.mode || 'user');
+      if (res.data.demo_expires_at) localStorage.setItem('chessDemoExpiresAt', res.data.demo_expires_at);
       navigate('/home');
       window.location.reload(); 
     } catch (err) { 
@@ -47,7 +52,7 @@ const LoginPage = () => {
   };
 
   const handleSocialLogin = (provider) => {
-    const url = `http://localhost:8000/auth/${provider}`;
+    const url = `${API_BASE}/auth/${provider}`;
     window.location.assign(url);
   };
 
@@ -56,7 +61,7 @@ const LoginPage = () => {
   const socialBtnClasses = "flex items-center w-full px-4 py-3 bg-[#454241] text-white rounded hover:bg-[#53504f] transition-colors duration-200 text-sm font-medium";
 
   return (
-    <div className="fixed inset-0 flex flex-col items-center justify-center bg-[#262421] font-sans overflow-hidden">
+    <div className="fixed inset-0 flex flex-col items-center justify-center bg-[#262421] px-4 py-6 font-sans overflow-y-auto">
       
       {/* Logo */}
       <div className="flex items-center gap-2.5 mb-8">
@@ -70,7 +75,7 @@ const LoginPage = () => {
       <motion.div 
         initial={{ opacity: 0, scale: 0.95 }} 
         animate={{ opacity: 1, scale: 1 }}
-        className="w-[min(90%,400px)] bg-chess-bg px-8 py-10 rounded-lg shadow-[0_15px_35px_rgba(0,0,0,0.4)] text-center"
+        className="w-full max-w-[400px] bg-chess-bg px-5 py-7 sm:px-8 sm:py-10 rounded-lg shadow-[0_15px_35px_rgba(0,0,0,0.4)] text-center"
       >
         <h2 className="text-white text-2xl font-bold mb-6">Sign in</h2>
         

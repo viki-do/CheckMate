@@ -135,7 +135,7 @@ const MasterReviewIntro = ({
   const blackRating = game.black_elo || '-';
 
   return (
-    <div className="relative w-[480px] h-[744px] bg-[#262421] rounded-lg flex flex-col shadow-xl border border-[#3c3a37] overflow-hidden font-sans">
+    <div className="app-panel-size relative bg-[#262421] rounded-lg flex flex-col shadow-xl border border-[#3c3a37] overflow-hidden font-sans">
       <header className="h-16 shrink-0 bg-[#21201d] border-b border-[#3c3a37] flex items-center justify-center relative">
         <div className="flex items-center gap-3 text-white text-[22px] font-black">
           <span className="w-7 h-7 rounded-full bg-[#d7d6d4] text-[#262421] flex items-center justify-center">

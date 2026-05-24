@@ -178,7 +178,7 @@ const SetUpPositionView = ({
 
     return (
         /* A fő konténer határozza meg a teljes méretet */
-        <div className="flex flex-col w-[480px] h-[744px] bg-[#262421] rounded-lg shadow-xl border border-[#3c3a37] overflow-hidden">
+        <div className="app-panel-size flex flex-col bg-[#262421] rounded-lg shadow-xl border border-[#3c3a37] overflow-hidden">
             
             {/* JAVÍTOTT HEADER: relative szülő, fix magasság */}
             <div className="relative border-b border-[#3c3a37] flex items-center bg-[#21201d] shrink-0 h-[64px] px-4">

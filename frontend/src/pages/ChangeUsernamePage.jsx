@@ -2,8 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { PiecePawn } from "../components/icons/Icons";
-
-const API_BASE = "http://localhost:8000";
+import { API_BASE } from "../config/api";
 
 const sidebarItems = [
     { label: "Board & Pieces", icon: "fa-chess-board" },
@@ -19,7 +18,7 @@ const sidebarItems = [
 ];
 
 const Field = ({ label, type = "text", value, onChange }) => (
-    <div className="grid grid-cols-[220px_345px] items-start gap-8">
+    <div className="grid grid-cols-1 items-start gap-2 md:grid-cols-[220px_minmax(0,345px)] md:gap-8">
         <label className="text-white text-[16px] font-medium">{label}</label>
         <div>
             <input
@@ -143,8 +142,8 @@ const ChangeUsernamePage = () => {
                     <h1 className="text-[30px] font-black tracking-tight">Settings</h1>
                 </div>
 
-                <div className="bg-[#242320] rounded-md min-h-[660px] shadow-sm flex overflow-hidden">
-                    <aside className="w-[290px] shrink-0 border-r border-[#3c3a37] py-9">
+                <div className="bg-[#242320] rounded-md min-h-[660px] shadow-sm flex flex-col overflow-hidden lg:flex-row">
+                    <aside className="w-full shrink-0 border-b border-[#3c3a37] py-5 lg:w-[290px] lg:border-b-0 lg:border-r lg:py-9">
                         <div className="px-7 mb-6">
                             <div className="h-[46px] bg-[#363532] border border-[#504e4a] rounded-md flex items-center px-3.5 gap-3 text-[#989795]">
                                 <i className="fas fa-search text-xl"></i>
@@ -152,14 +151,14 @@ const ChangeUsernamePage = () => {
                             </div>
                         </div>
 
-                        <nav className="flex flex-col">
+                        <nav className="flex overflow-x-auto lg:flex-col">
                             {sidebarItems.map((item) => (
                                 <button
                                     key={item.label}
                                     onClick={() => {
                                         if (item.label === "Profile") navigate("/settings/profile");
                                     }}
-                                    className={`h-[56px] px-7 flex items-center gap-3.5 text-left text-[15px] font-bold transition-colors relative ${item.active ? "bg-[#302f2c] text-white" : "text-[#d7d6d4] hover:bg-[#2c2b28]"}`}
+                                    className={`h-[56px] px-5 lg:px-7 flex shrink-0 items-center gap-3.5 text-left text-[15px] font-bold transition-colors relative ${item.active ? "bg-[#302f2c] text-white" : "text-[#d7d6d4] hover:bg-[#2c2b28]"}`}
                                 >
                                     {item.Icon ? (
                                         <item.Icon size={26} className={`w-6 ${item.active ? "text-white" : "text-[#989795]"}`} />
@@ -173,7 +172,7 @@ const ChangeUsernamePage = () => {
                         </nav>
                     </aside>
 
-                    <section className="flex-1 px-12 py-12 overflow-hidden">
+                    <section className="flex-1 px-5 py-7 overflow-y-auto lg:px-12 lg:py-12">
                         <div className="max-w-[780px]">
                             <h2 className="text-[25px] font-black mb-3">Change Username</h2>
                             <p className="text-[#bab9b8] text-[16px] mb-12 font-medium">
@@ -181,7 +180,7 @@ const ChangeUsernamePage = () => {
                             </p>
 
                             {(error || availabilityMessage) && (
-                                <div className={`mb-5 w-[760px] min-h-[56px] rounded-sm flex items-center gap-4 px-5 text-white border-l-4 ${
+                                <div className={`mb-5 w-full max-w-[760px] min-h-[56px] rounded-sm flex items-center gap-4 px-5 text-white border-l-4 ${
                                     error && errorType === "danger"
                                         ? "bg-[#3d2522] border-[#ff4b35]"
                                         : "bg-[#3b3420] border-[#f0b429]"
@@ -198,7 +197,7 @@ const ChangeUsernamePage = () => {
                             )}
 
                             <div className="flex flex-col gap-5">
-                                <div className="grid grid-cols-[220px_500px] items-start gap-8">
+                                <div className="grid grid-cols-1 items-start gap-2 md:grid-cols-[220px_minmax(0,500px)] md:gap-8">
                                     <label className="text-white text-[16px] font-medium pt-3">New Username</label>
                                     <div>
                                         <input
@@ -211,7 +210,7 @@ const ChangeUsernamePage = () => {
                                                     setErrorType("warning");
                                                 }
                                             }}
-                                            className="w-[345px] h-[46px] bg-[#343330] border border-[#4a4845] rounded-md px-3 text-[#d7d6d4] text-[15px] font-medium outline-none focus:border-[#81b64c]"
+                                            className="w-full max-w-[345px] h-[46px] bg-[#343330] border border-[#4a4845] rounded-md px-3 text-[#d7d6d4] text-[15px] font-medium outline-none focus:border-[#81b64c]"
                                         />
                                         {hasTouchedUsername && (
                                             <div className="mt-3 flex flex-col gap-2">
@@ -244,7 +243,7 @@ const ChangeUsernamePage = () => {
                                 <button
                                     onClick={handleChangeUsername}
                                     disabled={!canSubmit}
-                                    className={`w-60 h-[46px] rounded-md font-black text-[15px] transition-all ${
+                                    className={`w-full max-w-60 h-[46px] rounded-md font-black text-[15px] transition-all ${
                                         canSubmit
                                             ? "bg-gradient-to-b from-[#8bc34a] to-[#5fa444] text-white hover:from-[#9bd45c] hover:to-[#6cb64e]"
                                             : "bg-gradient-to-b from-[#5f8f43] to-[#477436] text-[#bab9b8] opacity-65"

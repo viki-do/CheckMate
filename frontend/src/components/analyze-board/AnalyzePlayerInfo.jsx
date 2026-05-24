@@ -9,7 +9,7 @@ const AnalyzePlayerInfo = ({ color, pieces, diff, onDragOver, playerName, player
 
     return (
         <div
-            className="w-170 h-12 flex items-center justify-between text-[#bab9b8]"
+            className="app-board-width h-12 flex items-center justify-between text-[#bab9b8]"
             onDragOver={onDragOver}
         >
             <div className="flex items-start gap-3">

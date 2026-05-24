@@ -23,7 +23,7 @@ const AnalyzeBoardSection = ({
     setIsDragging,
     gameInfo = null,
 }) => (
-    <div className="flex flex-col justify-center items-center gap-2">
+    <div className="flex w-full flex-col items-center justify-center gap-2 md:w-auto">
         <AnalyzePlayerInfo
             color="black"
             pieces={captured.blackSide}
@@ -38,7 +38,7 @@ const AnalyzeBoardSection = ({
 
         <div
             id="chess-board"
-            className="w-170 h-170 relative shadow-2xl"
+            className="app-board-size relative shadow-2xl"
             onDragOver={(e) => {
                 e.preventDefault();
                 e.dataTransfer.dropEffect = "move";

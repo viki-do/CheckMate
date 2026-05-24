@@ -5,6 +5,7 @@ import ArchivePagination from '../components/game-archive/ArchivePagination';
 import ArchiveTabs from '../components/game-archive/ArchiveTabs';
 import GameArchiveSidebar from '../components/game-archive/GameArchiveSidebar';
 import GameArchiveTable from '../components/game-archive/GameArchiveTable';
+import { API_BASE } from '../config/api';
 
 const GameArchive = () => {
     const { username: urlUsername } = useParams();
@@ -21,7 +22,7 @@ const GameArchive = () => {
         let isMounted = true;
         setIsLoading(true);
 
-        axios.get(`http://localhost:8000/user-games/${encodeURIComponent(username)}?offset=0&limit=50`)
+        axios.get(`${API_BASE}/user-games/${encodeURIComponent(username)}?offset=0&limit=50`)
             .then((res) => {
                 if (!isMounted) return;
                 setGames(res.data.games || []);

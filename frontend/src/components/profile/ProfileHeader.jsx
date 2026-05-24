@@ -1,11 +1,10 @@
 import { useNavigate } from "react-router-dom";
-
-const API_BASE = "http://localhost:8000";
+import { assetUrl } from "../../config/api";
 
 const getAvatarSrc = (avatarUrl) => {
     if (!avatarUrl) return "/assets/icons/noavatar.gif";
     if (avatarUrl.startsWith("http")) return avatarUrl;
-    return `${API_BASE}${avatarUrl}`;
+    return assetUrl(avatarUrl);
 };
 
 const ProfileHeader = ({ user, urlUsername }) => {

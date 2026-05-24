@@ -1,4 +1,4 @@
-export const API_BASE = 'http://localhost:8000';
+export { API_BASE } from '../../config/api';
 
 export const DEFAULT_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 

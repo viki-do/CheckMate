@@ -20,6 +20,22 @@ import {
     getSandboxGameState,
 } from './analyze-board/analyzeBoardUtils';
 import { getHistoryNavigationSoundName } from '../hooks/chess-game/soundUtils';
+import {
+    addGameToCollection,
+    deleteCollection as deleteDbCollection,
+    loadCollections,
+    updateCollection as updateDbCollection,
+} from '../services/collectionsService';
+import {
+    getSavedAnalysis,
+    saveAnalysis,
+} from '../services/savedAnalysesService';
+import {
+    deleteCurrentAnalysisDraft,
+    loadCurrentAnalysisDraft,
+    saveCurrentAnalysisDraft,
+    writeLocalAnalysisDraft,
+} from '../services/analysisDraftsService';
 
 const COLLECTIONS_STORAGE_KEY = 'checkmate_game_collections';
 const SAVED_ANALYSES_STORAGE_KEY = 'checkmate_saved_analyses';
@@ -43,7 +59,7 @@ const getGameSaveSignature = (history = [], startingFen = DEFAULT_FEN) => (
     })
 );
 
-const saveAnalysisGameToSavedList = (game) => {
+const saveAnalysisGameToSavedList = async (game) => {
     if (!game?.id) return null;
     try {
         const savedAnalyses = JSON.parse(localStorage.getItem(SAVED_ANALYSES_STORAGE_KEY) || '[]');
@@ -58,13 +74,13 @@ const saveAnalysisGameToSavedList = (game) => {
             : [nextGame, ...savedAnalyses];
 
         localStorage.setItem(SAVED_ANALYSES_STORAGE_KEY, JSON.stringify(nextSavedAnalyses));
-        return nextGame;
+        return await saveAnalysis(nextGame);
     } catch {
         return null;
     }
 };
 
-const updateSavedAnalysisGame = (game) => {
+const updateSavedAnalysisGame = async (game) => {
     if (!game?.id) return null;
     try {
         const collections = JSON.parse(localStorage.getItem(COLLECTIONS_STORAGE_KEY) || '[]');
@@ -94,6 +110,9 @@ const updateSavedAnalysisGame = (game) => {
         });
         if (didUpdate) {
             localStorage.setItem(COLLECTIONS_STORAGE_KEY, JSON.stringify(updatedCollections));
+            if (targetCollection?.id) {
+                await addGameToCollection(targetCollection.id, game);
+            }
         }
         return targetCollection;
     } catch {
@@ -385,13 +404,14 @@ const AnalyzeBoard = () => {
     useEffect(() => {
     if (isMasterReviewRoute || isCollectionAnalysisRoute || isSavedAnalysisRoute || isBotSelfAnalysisRoute || isBotReviewRoute) return;
     if (location.pathname === '/analysis' && !location.search) {
-        localStorage.removeItem('chess_analysis_cache');
+        deleteCurrentAnalysisDraft();
         return;
     }
-    const saved = localStorage.getItem('chess_analysis_cache');
-    if (saved) {
+    let isMounted = true;
+    const loadDraft = async () => {
+    const data = await loadCurrentAnalysisDraft();
+    if (isMounted && data) {
         try {
-            const data = JSON.parse(saved);
             
             // A meglévő betöltéseid:
             if (data.fen) setSandboxFen(data.fen);
@@ -419,7 +439,10 @@ const AnalyzeBoard = () => {
             console.error("Hiba a cache betöltésekor:", e);
         }
     }
-    }, [isMasterReviewRoute, isCollectionAnalysisRoute, isSavedAnalysisRoute, isBotSelfAnalysisRoute, isBotReviewRoute]); 
+    };
+    loadDraft();
+    return () => { isMounted = false; };
+    }, [isMasterReviewRoute, isCollectionAnalysisRoute, isSavedAnalysisRoute, isBotSelfAnalysisRoute, isBotReviewRoute, location.pathname, location.search]); 
 
     useEffect(() => {
         setAnalysisPanelTab(isAnalysisExplorerRoute ? 'explore' : 'analysis');
@@ -446,8 +469,9 @@ const AnalyzeBoard = () => {
             return;
         }
 
+        const loadCollectionGame = async () => {
         try {
-            const collections = JSON.parse(localStorage.getItem(COLLECTIONS_STORAGE_KEY) || '[]');
+            const collections = await loadCollections();
             const publicId = extractPublicIdFromSlug(collectionSlug);
             const collection = collections.find((item) => item.publicId === publicId || getCollectionGames(item).some((game) => String(game.id) === String(decodedGameId)));
             const game = getCollectionGames(collection).find((item) => String(item.id) === String(decodedGameId));
@@ -500,6 +524,8 @@ const AnalyzeBoard = () => {
             console.error('Collection analysis load failed:', err);
             setPanelNotice('Could not load this collection game.');
         }
+        };
+        loadCollectionGame();
     }, [isCollectionAnalysisRoute, isCollectionGamesRoute, collectionSlug, collectionGameId, searchParams]);
 
     useEffect(() => {
@@ -508,9 +534,9 @@ const AnalyzeBoard = () => {
         const moveParam = searchParams.get('move');
         const requestedMoveIndex = moveParam === null ? null : Number.parseInt(moveParam, 10);
 
+        const loadSavedAnalysisGame = async () => {
         try {
-            const savedAnalyses = JSON.parse(localStorage.getItem(SAVED_ANALYSES_STORAGE_KEY) || '[]');
-            const game = savedAnalyses.find((item) => String(item.id) === String(decodedGameId));
+            const game = await getSavedAnalysis(decodedGameId);
             if (!game) {
                 setPanelNotice('Could not load this saved analysis.');
                 return;
@@ -552,6 +578,8 @@ const AnalyzeBoard = () => {
             console.error('Saved analysis load failed:', err);
             setPanelNotice('Could not load this saved analysis.');
         }
+        };
+        loadSavedAnalysisGame();
     }, [isSavedAnalysisRoute, savedAnalysisId, searchParams]);
 
     useEffect(() => {
@@ -757,7 +785,11 @@ const AnalyzeBoard = () => {
             hasLoadedSetupPosition,
             showCustomPositionMenu,
         };
-        localStorage.setItem('chess_analysis_cache', JSON.stringify(cache));
+        writeLocalAnalysisDraft(cache);
+        const saveTimer = window.setTimeout(() => {
+            saveCurrentAnalysisDraft(cache);
+        }, 500);
+        return () => window.clearTimeout(saveTimer);
     }, [isMasterReviewRoute, isCollectionAnalysisRoute, isSavedAnalysisRoute, isPgnReviewRoute, isBotSelfAnalysisRoute, isBotReviewRoute, sandboxFen, sandboxHistory, sandboxLastMove, openingName, sandboxStartingFen, initialAnalysis, sandboxResult, sandboxGameInfo, panelNotice, isSandboxReviewComplete, masterReviewStarted, analysisSessionId, hasLoadedSetupPosition, showCustomPositionMenu]);
 
     useEffect(() => {
@@ -1241,7 +1273,7 @@ const handleFullReview = async ({ stayOnIntro = false } = {}) => {
                 }));
 
                 const reviewId = pgnGameId || analysisSessionId || createAnalysisSessionId();
-                saveAnalysisGameToSavedList(buildCurrentSandboxSavedGame(reviewId, reviewedHistory, {
+                await saveAnalysisGameToSavedList(buildCurrentSandboxSavedGame(reviewId, reviewedHistory, {
                     opening: res.data.analysis[0]?.opening || openingName || sandboxGameInfo?.opening || '',
                     white_accuracy: res.data.white_accuracy,
                     black_accuracy: res.data.black_accuracy,
@@ -1260,7 +1292,7 @@ const handleFullReview = async ({ stayOnIntro = false } = {}) => {
                     white_accuracy: res.data.white_accuracy,
                     black_accuracy: res.data.black_accuracy,
                 };
-                updateSavedAnalysisGame(updatedGame);
+                await updateSavedAnalysisGame(updatedGame);
                 setCollectionSavedGame(updatedGame);
                 setLastSavedGameSignature(getGameSaveSignature(reviewedHistory, sandboxStartingFen));
             }
@@ -1356,7 +1388,7 @@ const handleFullReview = async ({ stayOnIntro = false } = {}) => {
         handleFullReview();
     };
 
-    const handleReviewClick = () => {
+    const handleReviewClick = async () => {
         if (sandboxHistory.length === 0) return;
         if (isCollectionAnalysisRoute) {
             setMasterReviewStarted(false);
@@ -1366,7 +1398,7 @@ const handleFullReview = async ({ stayOnIntro = false } = {}) => {
         }
         const reviewId = pgnGameId || analysisSessionId || createAnalysisSessionId();
         if (!analysisSessionId) setAnalysisSessionId(reviewId);
-        saveAnalysisGameToSavedList(buildCurrentSandboxSavedGame(reviewId, sandboxHistory));
+        await saveAnalysisGameToSavedList(buildCurrentSandboxSavedGame(reviewId, sandboxHistory));
         setLastSavedGameSignature(currentSaveSignature);
         setMasterReviewStarted(false);
         navigate(`/analysis/game/pgn/${reviewId}/review`);
@@ -1787,7 +1819,7 @@ const handleExternalDrop = (e, row, col) => {
         setLastSavedGameSignature(null);
         setHasLoadedSetupPosition(false);
         setShowCustomPositionMenu(false);
-        localStorage.removeItem('chess_analysis_cache');
+        deleteCurrentAnalysisDraft();
         window.setTimeout(() => {
             isResettingAnalysisRef.current = false;
             setSandboxFen(DEFAULT_FEN);
@@ -1965,11 +1997,11 @@ const handleExternalDrop = (e, row, col) => {
         }
     };
 
-    const handleSaveToCollection = () => {
+    const handleSaveToCollection = async () => {
         if (!canSaveCurrentAnalysis) return;
 
         if (collectionSavedGame) {
-            const updatedCollection = updateSavedAnalysisGame(savedAnalysisGame);
+            const updatedCollection = await updateSavedAnalysisGame(savedAnalysisGame);
             setCollectionSavedGame(savedAnalysisGame);
             setLastSavedGameSignature(currentSaveSignature);
             if (updatedCollection && isCollectionAnalysisRoute) {
@@ -1981,16 +2013,10 @@ const handleExternalDrop = (e, row, col) => {
         setIsSaveModalOpen(true);
     };
 
-    const handleUpdateCollectionSettings = (collectionId, updates) => {
+    const handleUpdateCollectionSettings = async (collectionId, updates) => {
         if (!collectionId) return;
         try {
-            const collections = JSON.parse(localStorage.getItem(COLLECTIONS_STORAGE_KEY) || '[]');
-            const updatedCollections = collections.map((collection) => (
-                collection.id === collectionId
-                    ? { ...collection, ...updates }
-                    : collection
-            ));
-            localStorage.setItem(COLLECTIONS_STORAGE_KEY, JSON.stringify(updatedCollections));
+            await updateDbCollection(collectionId, updates);
             setCollectionContext((current) => (
                 current?.id === collectionId
                     ? { ...current, ...updates }
@@ -2001,14 +2027,10 @@ const handleExternalDrop = (e, row, col) => {
         }
     };
 
-    const handleDeleteCollection = (collectionId) => {
+    const handleDeleteCollection = async (collectionId) => {
         if (!collectionId) return;
         try {
-            const collections = JSON.parse(localStorage.getItem(COLLECTIONS_STORAGE_KEY) || '[]');
-            localStorage.setItem(
-                COLLECTIONS_STORAGE_KEY,
-                JSON.stringify(collections.filter((collection) => collection.id !== collectionId))
-            );
+            await deleteDbCollection(collectionId);
         } catch (err) {
             console.error('Could not delete collection:', err);
         }
@@ -2016,7 +2038,7 @@ const handleExternalDrop = (e, row, col) => {
     };
 
     return (
-        <div className="flex h-screen w-full bg-[#302f2c] text-[#bab9b8] px-6 py-4 gap-6 overflow-hidden select-none font-sans items-center"
+        <div className="flex min-h-dvh w-full flex-col items-center bg-[#302f2c] text-[#bab9b8] px-3 py-3 gap-4 overflow-y-auto overflow-x-hidden select-none font-sans md:h-dvh md:flex-row md:justify-center md:px-4 md:py-4 md:gap-4 md:overflow-hidden xl:gap-6 xl:px-6"
             onDragOver={(e) => {
                 // Ez engedélyezi, hogy az egész képernyőn kövessük az egeret
                 e.preventDefault();
@@ -2048,7 +2070,7 @@ const handleExternalDrop = (e, row, col) => {
                 gameInfo={boardGameInfo}
             />
         
-            <div className="w-[480px] h-[744px] shrink-0 relative box-border">
+            <div className="app-panel-size shrink-0 relative box-border">
             {rightPanelMode === 'setup' ? (
             <SetUpPositionView 
                 onBack={returnToAnalysisMenuFromSetup}

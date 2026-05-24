@@ -1,6 +1,5 @@
 import { io } from "socket.io-client";
-
-const SOCKET_URL = "http://localhost:8000";
+import { SOCKET_URL } from "./config/api";
 
 // Csak akkor hozzuk létre a kapcsolatot, ha még nincs
 export const socket = io(SOCKET_URL, {

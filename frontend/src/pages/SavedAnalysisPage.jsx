@@ -1,39 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Trash2 } from "lucide-react";
-
-const SAVED_ANALYSES_STORAGE_KEY = "checkmate_saved_analyses";
-const COLLECTIONS_STORAGE_KEY = "checkmate_game_collections";
-const LEGACY_SAVED_ANALYSIS_COLLECTION_NAME = "Saved Analysis";
-
-const readSavedAnalyses = () => {
-    try {
-        const savedAnalyses = JSON.parse(localStorage.getItem(SAVED_ANALYSES_STORAGE_KEY) || "[]");
-        const collections = JSON.parse(localStorage.getItem(COLLECTIONS_STORAGE_KEY) || "[]");
-        const legacyCollection = collections.find((collection) => collection?.name === LEGACY_SAVED_ANALYSIS_COLLECTION_NAME);
-
-        if (legacyCollection) {
-            const legacyGames = Array.isArray(legacyCollection.games) ? legacyCollection.games : [];
-            const mergedSavedAnalyses = [...savedAnalyses];
-
-            legacyGames.forEach((legacyGame) => {
-                const exists = mergedSavedAnalyses.some((savedGame) => String(savedGame.id) === String(legacyGame.id));
-                if (!exists) mergedSavedAnalyses.push(legacyGame);
-            });
-
-            localStorage.setItem(SAVED_ANALYSES_STORAGE_KEY, JSON.stringify(mergedSavedAnalyses));
-            localStorage.setItem(
-                COLLECTIONS_STORAGE_KEY,
-                JSON.stringify(collections.filter((collection) => collection?.name !== LEGACY_SAVED_ANALYSIS_COLLECTION_NAME))
-            );
-            return mergedSavedAnalyses;
-        }
-
-        return savedAnalyses;
-    } catch {
-        return [];
-    }
-};
+import {
+    deleteSavedAnalysis,
+    loadSavedAnalyses,
+    readLocalSavedAnalyses,
+} from "../services/savedAnalysesService";
 
 const compactMoveText = (game) => {
     const moves = String(game?.moves || game?.pgn || "").replace(/\s+/g, " ").trim();
@@ -114,17 +86,21 @@ const SavedAnalysisRow = ({ item, onOpen, onDelete }) => (
 
 const SavedAnalysisPage = () => {
     const navigate = useNavigate();
-    const [savedItems, setSavedItems] = useState(readSavedAnalyses);
+    const [savedItems, setSavedItems] = useState(readLocalSavedAnalyses);
+
+    useEffect(() => {
+        let isMounted = true;
+        loadSavedAnalyses().then((items) => {
+            if (isMounted) setSavedItems(items);
+        });
+        return () => { isMounted = false; };
+    }, []);
 
     const savedAnalyses = useMemo(() => buildSavedAnalyses(savedItems), [savedItems]);
 
-    const persistSavedAnalyses = (nextSavedItems) => {
-        setSavedItems(nextSavedItems);
-        localStorage.setItem(SAVED_ANALYSES_STORAGE_KEY, JSON.stringify(nextSavedItems));
-    };
-
-    const handleDelete = (item) => {
-        persistSavedAnalyses(savedItems.filter((game) => String(game.id) !== String(item.id)));
+    const handleDelete = async (item) => {
+        await deleteSavedAnalysis(item.id);
+        setSavedItems((current) => current.filter((game) => String(game.id) !== String(item.id)));
     };
 
     const handleOpen = (item) => {

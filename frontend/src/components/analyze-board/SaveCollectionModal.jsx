@@ -2,6 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Check, Copy, Plus, Search, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import {
+    addGameToCollection as addGameToDbCollection,
+    createCollection as createDbCollection,
+    loadCollections,
+} from '../../services/collectionsService';
 
 const COLLECTIONS_STORAGE_KEY = 'checkmate_game_collections';
 const PUBLIC_ID_CHARS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -56,7 +61,7 @@ const SaveCollectionModal = ({ isOpen, onClose, game, onSaved }) => {
 
     useEffect(() => {
         if (!isOpen) return;
-        setCollections(readCollections());
+        loadCollections().then(setCollections);
         setFilter('');
         setLastAddedCollectionId(null);
         setIsCreatingCollection(false);
@@ -71,32 +76,13 @@ const SaveCollectionModal = ({ isOpen, onClose, game, onSaved }) => {
 
     if (!isOpen) return null;
 
-    const addGameToCollection = (collectionId) => {
+    const addGameToCollection = async (collectionId) => {
         if (!game) return;
-        let didAdd = false;
-        let targetCollection = null;
-        const updatedCollections = collections.map((collection) => {
-            if (collection.id !== collectionId) return collection;
-            const games = getCollectionGames(collection);
-            const exists = games.some((savedGame) => String(savedGame.id) === String(game.id));
-            const nextGames = exists
-                ? games.map((savedGame) => (
-                    String(savedGame.id) === String(game.id)
-                        ? { ...game, addedAt: savedGame.addedAt || game.addedAt, updatedAt: new Date().toISOString() }
-                        : savedGame
-                ))
-                : [game, ...games];
-            didAdd = !exists;
-            targetCollection = {
-                ...collection,
-                games: nextGames,
-                gameCount: nextGames.length,
-                updatedAt: new Date().toISOString(),
-            };
-            return targetCollection;
-        });
+        const existingCollection = collections.find((collection) => collection.id === collectionId);
+        const didAdd = !getCollectionGames(existingCollection).some((savedGame) => String(savedGame.id) === String(game.id));
+        const targetCollection = await addGameToDbCollection(collectionId, game);
+        const updatedCollections = await loadCollections({ migrate: false });
         setCollections(updatedCollections);
-        writeCollections(updatedCollections);
         setLastAddedCollectionId(didAdd ? collectionId : null);
         if (targetCollection) {
             onSaved?.(targetCollection);
@@ -104,10 +90,10 @@ const SaveCollectionModal = ({ isOpen, onClose, game, onSaved }) => {
         }
     };
 
-    const createCollection = () => {
+    const createCollection = async () => {
         const name = newCollectionName.trim();
         if (name.length < 2) return;
-        const newCollection = {
+        const newCollection = await createDbCollection({
             id: crypto.randomUUID(),
             publicId: createPublicId(),
             name,
@@ -118,10 +104,8 @@ const SaveCollectionModal = ({ isOpen, onClose, game, onSaved }) => {
             gameCount: 0,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
-        };
-        const updatedCollections = [newCollection, ...collections];
-        setCollections(updatedCollections);
-        writeCollections(updatedCollections);
+        });
+        setCollections((prev) => [newCollection, ...prev.filter((collection) => collection.id !== newCollection.id)]);
         setNewCollectionName('');
         setIsCreatingCollection(false);
     };
@@ -153,7 +137,7 @@ const SaveCollectionModal = ({ isOpen, onClose, game, onSaved }) => {
                 initial={{ opacity: 0, scale: 0.96 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.96 }}
-                className="relative w-[420px] h-[460px] rounded-lg bg-[#272522] border border-[#3a3936] shadow-2xl overflow-hidden flex flex-col"
+                className="relative h-[min(460px,calc(100dvh-32px))] w-[min(420px,calc(100vw-32px))] rounded-lg bg-[#272522] border border-[#3a3936] shadow-2xl overflow-hidden flex flex-col"
             >
                 <div className="h-[52px] px-4 flex items-center justify-between bg-[#1f1e1b] shrink-0">
                     <h2 className="text-white text-[18px] font-semibold">Add to Collection</h2>

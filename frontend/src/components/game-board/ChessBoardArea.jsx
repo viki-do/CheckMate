@@ -19,7 +19,7 @@ const ChessBoardArea = ({
     onNewGame,
 }) => (
     <div className="relative shrink-0 p-0 m-0">
-        <div id="chess-board" className="w-170 h-170 bg-[#2b2b2b] relative"
+        <div id="chess-board" className="app-board-size bg-[#2b2b2b] relative"
             style={{ pointerEvents: isGameActiveUI ? 'auto' : 'none' }}>
             <ChessBoardGrid
                 gameLogic={boardGameLogic || gameLogic}

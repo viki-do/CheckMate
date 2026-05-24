@@ -17,6 +17,11 @@ import {
 import CapturedProgressBar from '../game-board/CapturedProgressBar';
 import { useChess } from '../../context/ChessContext';
 import { getReplayPositionSoundName } from '../../hooks/chess-game/soundUtils';
+import {
+  addGameToCollection as addGameToDbCollection,
+  createCollection as createDbCollection,
+  loadCollections,
+} from '../../services/collectionsService';
 import { MoveNotation } from '../move-list/MoveNotation';
 import { CapturedRow } from '../MaterialAdvantage';
 import { getCapturedPieces, getMaterialDiff } from '../materialUtils';
@@ -107,7 +112,7 @@ const PlayerStrip = ({ name, rating, type, material, side, isWinner = false }) =
   const image = getPlayerImage(name);
 
   return (
-    <div className={`w-170 flex items-center justify-between px-1 h-12 ${type === 'top' ? 'mb-1' : 'mt-1'} shrink-0`}>
+    <div className={`app-board-width flex items-center justify-between px-1 h-12 ${type === 'top' ? 'mb-1' : 'mt-1'} shrink-0`}>
       <div className="flex items-center gap-3 min-w-0">
         <div
           className={`w-9 h-9 bg-[#2b2a27] rounded-md flex items-center justify-center overflow-hidden shrink-0 ${
@@ -224,7 +229,7 @@ const AddToCollectionModal = ({ isOpen, game, collections, filter, onFilterChang
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75">
-      <div className="w-[420px] h-[460px] rounded-lg bg-[#272522] border border-[#3a3936] shadow-2xl overflow-hidden flex flex-col">
+      <div className="h-[min(460px,calc(100dvh-32px))] w-[min(420px,calc(100vw-32px))] rounded-lg bg-[#272522] border border-[#3a3936] shadow-2xl overflow-hidden flex flex-col">
         <div className="h-13 px-4 flex items-center justify-between bg-[#1f1e1b] shrink-0">
           <h2 className="text-white text-[18px] font-semibold">Add to Collection</h2>
           <button type="button" onClick={onClose} className="text-[#8f8e8b] hover:text-white">
@@ -380,47 +385,28 @@ const DatabaseGameViewer = ({ game }) => {
     navigate(`/analysis/game/master/${game.id}/review`);
   };
 
-  const loadCollections = () => {
-    try {
-      setCollections(JSON.parse(localStorage.getItem(COLLECTIONS_STORAGE_KEY) || '[]'));
-    } catch {
-      setCollections([]);
-    }
+  const refreshCollections = async () => {
+    setCollections(await loadCollections());
   };
 
   const openAddToCollection = () => {
-    loadCollections();
+    refreshCollections();
     setCollectionFilter('');
     setLastAddedCollectionId(null);
     setIsAddToCollectionOpen(true);
   };
 
-  const addGameToCollection = (collectionId) => {
+  const addGameToCollection = async (collectionId) => {
     const gamePayload = getGameCollectionPayload(game);
-    let didAdd = false;
-    const updatedCollections = collections.map((collection) => {
-      if (collection.id !== collectionId) return collection;
-
-      const games = getCollectionGames(collection);
-      const exists = games.some((savedGame) => String(savedGame.id) === String(gamePayload.id));
-      const nextGames = exists ? games : [gamePayload, ...games];
-      didAdd = !exists;
-
-      return {
-        ...collection,
-        games: nextGames,
-        gameCount: nextGames.length,
-        updatedAt: new Date().toISOString(),
-      };
-    });
-
-    setCollections(updatedCollections);
-    localStorage.setItem(COLLECTIONS_STORAGE_KEY, JSON.stringify(updatedCollections));
+    const existingCollection = collections.find((collection) => collection.id === collectionId);
+    const didAdd = !getCollectionGames(existingCollection).some((savedGame) => String(savedGame.id) === String(gamePayload.id));
+    await addGameToDbCollection(collectionId, gamePayload);
+    setCollections(await loadCollections({ migrate: false }));
     setLastAddedCollectionId(didAdd ? collectionId : null);
   };
 
-  const createCollectionFromModal = (name) => {
-    const newCollection = {
+  const createCollectionFromModal = async (name) => {
+    const newCollection = await createDbCollection({
       id: crypto.randomUUID(),
       publicId: createPublicId(),
       name,
@@ -431,10 +417,8 @@ const DatabaseGameViewer = ({ game }) => {
       gameCount: 0,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-    };
-    const updatedCollections = [newCollection, ...collections];
-    setCollections(updatedCollections);
-    localStorage.setItem(COLLECTIONS_STORAGE_KEY, JSON.stringify(updatedCollections));
+    });
+    setCollections((prev) => [newCollection, ...prev.filter((collection) => collection.id !== newCollection.id)]);
   };
 
   const playReplaySound = (nextIndex) => {
@@ -468,7 +452,7 @@ const DatabaseGameViewer = ({ game }) => {
   }, [moveIndex, replay.history.length]);
 
   return (
-    <main className="flex justify-center items-center h-screen w-full bg-[#1e1e1e] gap-6 p-4 overflow-hidden select-none relative">
+    <main className="flex min-h-dvh w-full flex-col items-center justify-start bg-[#1e1e1e] gap-4 p-3 overflow-y-auto overflow-x-hidden select-none relative md:h-dvh md:flex-row md:justify-center md:gap-4 md:p-4 md:overflow-hidden xl:gap-6">
       <CapturedProgressBar />
 
       <div className="flex flex-col justify-center items-center h-full shrink-0">
@@ -481,7 +465,7 @@ const DatabaseGameViewer = ({ game }) => {
           isWinner={blackWon}
         />
 
-        <div className="w-170 h-170 bg-[#2b2b2b] relative">
+        <div className="app-board-size bg-[#2b2b2b] relative">
           <ChessBoardGrid
             gameLogic={boardGameLogic}
             onMouseDown={() => {}}
@@ -499,7 +483,7 @@ const DatabaseGameViewer = ({ game }) => {
         />
       </div>
 
-      <aside className="w-[480px] shrink-0 h-[744px] self-center bg-[#262421] flex flex-col font-sans border border-[#3c3a37] rounded-md overflow-hidden shadow-2xl">
+      <aside className="app-panel-size shrink-0 self-center bg-[#262421] flex flex-col font-sans border border-[#3c3a37] rounded-md overflow-hidden shadow-2xl">
         <div className="grid grid-cols-2 h-15 bg-[#1f1e1b] shrink-0">
           <button
             type="button"

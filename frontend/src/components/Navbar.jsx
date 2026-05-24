@@ -2,13 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { MoreHorizontal } from 'lucide-react';
 import axios from 'axios';
-
-const API_BASE = "http://localhost:8000";
+import { API_BASE, assetUrl } from '../config/api';
 
 const getAvatarSrc = (avatarUrl) => {
     if (!avatarUrl) return "/assets/icons/noavatar.gif";
     if (avatarUrl.startsWith("http")) return avatarUrl;
-    return `${API_BASE}${avatarUrl}`;
+    return assetUrl(avatarUrl);
 };
 
 const Navbar = () => {
@@ -50,11 +49,11 @@ const Navbar = () => {
     const isActive = (path) => location.pathname.startsWith(path);
 
     return (
-        <aside className="w-36 lg:w-40 h-screen bg-[#262421] flex flex-col py-4 border-r border-[#3c3a37] sticky top-0 left-0 z-[1000]">
+        <aside className="fixed inset-x-0 bottom-0 z-[1000] h-16 border-t border-[#3c3a37] bg-[#262421] md:sticky md:top-0 md:left-0 md:h-screen md:w-36 md:shrink-0 md:flex-col md:border-r md:border-t-0 md:py-4 lg:w-40 flex">
             {/* Logo */}
             <div
                 onClick={() => navigate('/home')}
-                className="flex flex-col items-center gap-1 mb-8 no-underline text-white group px-2 text-center cursor-pointer"
+                className="hidden flex-col items-center gap-1 mb-8 no-underline text-white group px-2 text-center cursor-pointer md:flex"
             >
                 <img
                     src="/assets/logos/chess.png"
@@ -66,7 +65,7 @@ const Navbar = () => {
                 </span>
             </div>
 
-            <nav className="flex-1 flex flex-col gap-1 px-1 relative">
+            <nav className="relative grid flex-1 grid-cols-5 gap-1 px-1 py-1 md:flex md:flex-col md:py-0">
                 
                 {/* --- PLAY DROPDOWN CONTAINER --- */}
                 <div 
@@ -201,7 +200,7 @@ const Navbar = () => {
                         <div className="absolute left-full top-0 w-2 h-28 z-[1990]" />
                     )}
                     <button
-                        className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-all relative group cursor-pointer ${
+                        className={`w-full h-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-2 md:px-3 py-2 md:py-3 rounded-lg transition-all relative group cursor-pointer ${
                             isOtherHovered
                                 ? 'bg-[#312e2b] text-white shadow-sm'
                                 : 'text-[#bab9b8] hover:bg-[#312e2b] hover:text-white'
@@ -210,7 +209,7 @@ const Navbar = () => {
                         <span className={`${isOtherHovered ? 'text-[#81b64c]' : 'text-[#bab9b8] group-hover:text-white'}`}>
                             <MoreHorizontal size={20} />
                         </span>
-                        <span className="text-[15px] font-bold">Other</span>
+                        <span className="text-[11px] md:text-[15px] font-bold leading-none">Other</span>
                     </button>
 
                     {isOtherHovered && (
@@ -243,7 +242,7 @@ const Navbar = () => {
             </nav>
 
             {/* Footer Buttons */}
-            <div className="mt-auto flex flex-col gap-2 px-2 pt-4 border-t border-[#3c3a37]">
+            <div className="mt-auto hidden flex-col gap-2 px-2 pt-4 border-t border-[#3c3a37] md:flex">
                 <div
                     onClick={() => navigate(`/member/${username}`)}
                     className={`w-full min-w-0 flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-all ${location.pathname.startsWith('/member') ? 'bg-[#312e2b] text-white' : 'text-[#bab9b8] hover:bg-[#312e2b] hover:text-white'}`}
@@ -279,7 +278,7 @@ const ImageIcon = ({ src, alt, className = 'w-5 h-5' }) => (
 const NavItem = ({ to, icon, label, active, badge }) => (
     <Link
         to={to}
-        className={`flex items-center gap-3 px-3 py-3 rounded-lg transition-all relative group ${
+        className={`relative group flex h-full flex-col items-center justify-center gap-1 rounded-lg px-2 py-2 transition-all md:h-auto md:flex-row md:justify-start md:gap-3 md:px-3 md:py-3 ${
             active
             ? 'bg-[#312e2b] text-white shadow-sm'
             : 'text-[#bab9b8] hover:bg-[#312e2b] hover:text-white'
@@ -288,7 +287,7 @@ const NavItem = ({ to, icon, label, active, badge }) => (
         <span className={`${active ? 'text-[#81b64c]' : 'text-[#bab9b8] group-hover:text-white'}`}>
             {icon}
         </span>
-        <span className="text-[15px] font-bold">{label}</span>
+        <span className="text-[11px] md:text-[15px] font-bold leading-none">{label}</span>
         {badge && (
             <span className="absolute right-2 w-5 h-5 bg-[#e74c3c] text-[11px] text-white rounded-full flex items-center justify-center font-bold">
                 {badge}

@@ -14,7 +14,7 @@ const PlayerInfoBar = ({
     clockIsActive,
     clockSeconds,
 }) => (
-    <div className={`w-170 flex items-center justify-between px-1 h-12 ${type === 'top' ? 'mb-1' : 'mt-1'} shrink-0`}>
+    <div className={`app-board-width flex items-center justify-between px-1 h-12 ${type === 'top' ? 'mb-1' : 'mt-1'} shrink-0`}>
         <div className="flex items-center gap-3">
             <div className="w-9 h-9 bg-[#2b2a27] rounded-md flex items-center justify-center border border-chess-bg overflow-hidden">
                 {type === 'top' ? (
