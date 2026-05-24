@@ -17,3 +17,9 @@ export const profileAvatarSrc = (avatarUrl) => {
   if (!avatarUrl) return DEFAULT_AVATAR_SRC;
   return String(avatarUrl).startsWith('http') ? avatarUrl : assetUrl(avatarUrl);
 };
+
+export const useDefaultAvatarOnError = (event) => {
+  if (event.currentTarget.dataset.defaultAvatarApplied === 'true') return;
+  event.currentTarget.dataset.defaultAvatarApplied = 'true';
+  event.currentTarget.src = DEFAULT_AVATAR_SRC;
+};

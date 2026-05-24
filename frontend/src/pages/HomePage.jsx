@@ -6,7 +6,7 @@ import React , { useMemo } from 'react';
 import { Chess } from 'chess.js';
 import GameHistoryTypeIcon from '../components/game-history/GameHistoryTypeIcon';
 import ReviewAccuracyButton from '../components/game-history/ReviewAccuracyButton';
-import { API_BASE, profileAvatarSrc } from '../config/api';
+import { API_BASE, profileAvatarSrc, useDefaultAvatarOnError } from '../config/api';
 
 const COLLECTIONS_STORAGE_KEY = 'checkmate_game_collections';
 
@@ -203,7 +203,7 @@ const HomePage = () => {
                 className="w-10 h-10 bg-[#3c3a37] rounded flex items-center justify-center overflow-hidden transition-colors hover:bg-[#4a4845] cursor-pointer"
                 aria-label="Open profile"
             >
-                <img src={avatarSrc} alt="avatar" className="w-full h-full object-cover" />
+                <img src={avatarSrc} alt="avatar" onError={useDefaultAvatarOnError} className="w-full h-full object-cover" />
             </button>
             <h1 className="text-xl font-bold text-white flex items-center gap-2">
                 <button
