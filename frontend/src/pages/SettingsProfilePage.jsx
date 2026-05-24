@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { PiecePawn } from "../components/icons/Icons";
-import { API_BASE } from "../config/api";
+import { API_BASE, profileAvatarSrc } from "../config/api";
 
 const sidebarItems = [
     { label: "Board & Pieces", icon: "fa-chess-board" },
@@ -59,11 +59,7 @@ const formatJoinDate = (value) => {
     }).format(date);
 };
 
-const getAvatarSrc = (avatarUrl) => {
-    if (!avatarUrl) return "/assets/icons/noavatar.gif";
-    if (avatarUrl.startsWith("http")) return avatarUrl;
-    return `${API_BASE}${avatarUrl}`;
-};
+const getAvatarSrc = profileAvatarSrc;
 
 const SettingsProfilePage = () => {
     const navigate = useNavigate();

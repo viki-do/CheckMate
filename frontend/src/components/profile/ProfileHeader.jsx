@@ -1,11 +1,7 @@
 import { useNavigate } from "react-router-dom";
-import { assetUrl } from "../../config/api";
+import { profileAvatarSrc } from "../../config/api";
 
-const getAvatarSrc = (avatarUrl) => {
-    if (!avatarUrl) return "/assets/icons/noavatar.gif";
-    if (avatarUrl.startsWith("http")) return avatarUrl;
-    return assetUrl(avatarUrl);
-};
+const getAvatarSrc = profileAvatarSrc;
 
 const ProfileHeader = ({ user, urlUsername }) => {
     const navigate = useNavigate();

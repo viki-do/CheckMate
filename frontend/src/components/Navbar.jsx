@@ -2,13 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { MoreHorizontal } from 'lucide-react';
 import axios from 'axios';
-import { API_BASE, assetUrl } from '../config/api';
+import { API_BASE, profileAvatarSrc } from '../config/api';
 
-const getAvatarSrc = (avatarUrl) => {
-    if (!avatarUrl) return "/assets/icons/noavatar.gif";
-    if (avatarUrl.startsWith("http")) return avatarUrl;
-    return assetUrl(avatarUrl);
-};
+const getAvatarSrc = profileAvatarSrc;
 
 const Navbar = () => {
     const navigate = useNavigate();
