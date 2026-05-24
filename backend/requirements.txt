@@ -3,6 +3,7 @@ argon2-cffi
 boto3
 fastapi
 httpx
+itsdangerous
 passlib[argon2]
 psycopg2-binary
 pyjwt
