@@ -119,16 +119,16 @@ const MasterReviewIntro = ({
   const hasStoredBlackAccuracy = game.black_accuracy !== null && game.black_accuracy !== undefined;
   const calculatedWhiteAccuracy = calculateAccuracy(history, 'white');
   const calculatedBlackAccuracy = calculateAccuracy(history, 'black');
-  const hasWhiteAccuracy = hasStoredWhiteAccuracy || calculatedWhiteAccuracy !== null;
-  const hasBlackAccuracy = hasStoredBlackAccuracy || calculatedBlackAccuracy !== null;
-  const hasStoredReviewSummary = hasWhiteAccuracy && hasBlackAccuracy && history.some((move) => move?.analysisLabel);
+  const hasStoredReviewSummary = hasStoredWhiteAccuracy && hasStoredBlackAccuracy && history.some((move) => move?.analysisLabel);
   const isPreparingReview = isReviewing && !reviewStarted && !hasStoredReviewSummary;
+  const showWhiteAccuracyLoading = isPreparingReview && !hasStoredWhiteAccuracy;
+  const showBlackAccuracyLoading = isPreparingReview && !hasStoredBlackAccuracy;
   const whiteAccuracy = hasStoredWhiteAccuracy
     ? formatAccuracy(game.white_accuracy)
-    : (calculatedWhiteAccuracy !== null ? formatAccuracy(calculatedWhiteAccuracy) : (isPreparingReview ? <LoadingDots /> : ''));
+    : (showWhiteAccuracyLoading ? <LoadingDots /> : (calculatedWhiteAccuracy !== null ? formatAccuracy(calculatedWhiteAccuracy) : ''));
   const blackAccuracy = hasStoredBlackAccuracy
     ? formatAccuracy(game.black_accuracy)
-    : (calculatedBlackAccuracy !== null ? formatAccuracy(calculatedBlackAccuracy) : (isPreparingReview ? <LoadingDots /> : ''));
+    : (showBlackAccuracyLoading ? <LoadingDots /> : (calculatedBlackAccuracy !== null ? formatAccuracy(calculatedBlackAccuracy) : ''));
   const whiteWon = game.result === '1-0';
   const blackWon = game.result === '0-1';
   const whiteRating = game.white_elo || '-';
