@@ -58,7 +58,7 @@ export const useChessGame = () => {
 
     const playSound = useCallback((soundName) => {
         const audio = new Audio(`/assets/sounds/${soundName}.mp3`);
-        audio.play().catch(() => console.log(`Audio error: ${soundName}`));
+        audio.play().catch(() => {});
     }, []);
 
     const playBotMoveSound = useCallback((san) => {
@@ -301,9 +301,7 @@ export const useChessGame = () => {
 
 
 const initializeGame = useCallback(async () => {
-        console.log("HOOK: initializeGame elindult");
         if (!token) {
-            console.log("HOOK: Nincs token, leállás");
             setIsLoading(false);
             return;
         }
@@ -313,10 +311,8 @@ const initializeGame = useCallback(async () => {
                 headers: { Authorization: `Bearer ${token}` }
             });
 
-            console.log("HOOK: API válasz érkezett:", res.data);
 
             if (res.data.game_id) {
-                console.log("HOOK: Aktív meccs találva, ID:", res.data.game_id);
                 const newId = res.data.game_id;
                 
                 setGameId(newId);
@@ -324,7 +320,6 @@ const initializeGame = useCallback(async () => {
                 
                 // JAVÍTÁS: Socket csatlakozás és szobába lépés F5 után is
                 socket.on("connect", () => {
-                    console.log("HOOK: Socket csatlakozva, szobába lépés...");
                     socket.emit("join_game", { game_id: newId });
                 });
 
@@ -336,14 +331,12 @@ const initializeGame = useCallback(async () => {
 
                 await fetchGameState(newId);
             } else {
-                console.log("HOOK: Tényleg nincs játék a szerveren.");
                 setGameId(null);
             }
         } catch (e) {
             console.error("HOOK: Hiba az inicializálás alatt:", e);
             setGameId(null);
         } finally {
-            console.log("HOOK: isLoading -> false");
             setIsLoading(false);
         }
     }, [token, fetchGameState]);
@@ -742,15 +735,12 @@ const handleMouseDown = (e, row, col) => {
     // --- ÚJ SOCKET.IO EFFECT (Kiváltja a pollingot) ---
 useEffect(() => {
     if (!gameId || !socket) {
-        console.log("WS EFFECT: Hiányzó gameId vagy socket példány, várakozás...");
         return;
     }
 
-    console.log("WS EFFECT: Inicializálás a következő játékhoz:", gameId);
 
     // Szobába lépés függvénye
     const joinRoom = () => {
-        console.log("WS: 'join_game' küldése a szobához:", gameId);
         socket.emit("join_game", { game_id: gameId });
     };
 
@@ -761,7 +751,6 @@ useEffect(() => {
 
     // Eseménykezelők definiálása
     const onConnect = () => {
-        console.log("WS: Socket csatlakozva (ID: " + socket.id + ")");
         joinRoom();
     };
 
@@ -770,7 +759,6 @@ useEffect(() => {
     };
 
     const handleBotMove = (data) => {
-        console.log("WS: 'bot_moved' esemény nyers adatai:", data);
         
         // UUID típusbiztonsági ellenőrzés
         if (String(data.game_id) !== String(gameId)) {
@@ -778,12 +766,10 @@ useEffect(() => {
             return;
         }
 
-        console.log("%cWS: Bot lépése sikeresen feldolgozva!", "color: green; font-weight: bold;");
 
         const botMove = data.move;
         const nextTurnColor = data.fen.split(' ')[1];
         if (processedBotFenRef.current.has(data.fen)) {
-            console.log("WS: DuplikÃ¡lt bot FEN, kihagyva:", data.fen);
             return;
         }
         processedBotFenRef.current.add(data.fen);
@@ -829,7 +815,6 @@ useEffect(() => {
 
     const handleGameOver = (data) => {
         if (String(data.game_id) !== String(gameId)) return;
-        console.log("%cWS: Játék vége üzenet érkezett!", "color: orange; font-weight: bold;", data);
         
         setStatus(data.status);
         setReason(data.reason);
@@ -851,7 +836,6 @@ useEffect(() => {
 
     // Takarítás a hook leállásakor
     return () => {
-        console.log("WS EFFECT: Takarítás...");
         socket.off("connect", onConnect);
         socket.off("disconnect", onDisconnect);
         socket.off("bot_moved", handleBotMove);

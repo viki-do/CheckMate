@@ -47,7 +47,6 @@ const BotSelectionOrGame = () => {
      * 3. LÉPÉS: Alapértelmezett állapot
      * Ha nincs gameId (null), akkor visszatérünk a választóhoz.
      */
-    console.log("PANEL: Nincs aktív játék, BotSelectionPanel megjelenítése.");
     return (
         <BotSelectionPanel 
             onBack={() => navigate('/play')}

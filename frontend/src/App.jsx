@@ -51,7 +51,6 @@ const App = () => {
     // Automatikus inicializálás az oldal betöltésekor
     useEffect(() => {
         if (isAuthenticated) {
-            console.log("App: Felhasználó hitelesítve, játék inicializálása...");
             initializeGame();
         }
     }, [isAuthenticated, initializeGame]);
