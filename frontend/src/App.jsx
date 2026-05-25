@@ -209,6 +209,10 @@ const App = () => {
                             element={isAuthenticated ? <GameDatabase /> : <Navigate to="/login" />}
                         />
                         <Route
+                            path="/games/search"
+                            element={isAuthenticated ? <GameDatabase /> : <Navigate to="/login" />}
+                        />
+                        <Route
                             path="/games/:playerSlug"
                             element={isAuthenticated ? <GameDatabase /> : <Navigate to="/login" />}
                         />

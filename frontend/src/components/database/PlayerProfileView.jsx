@@ -35,10 +35,13 @@ const PlayerProfileView = ({
   gamesPage,
   gamesTotalPages,
   detailFilters,
+  primaryPlayerValue,
   gamesSort,
   isGamesLoading,
+  isSearchMode = false,
   onBack,
   onDetailFiltersChange,
+  onPrimaryPlayerChange,
   onDetailSearch,
   onGamesSortChange,
   onGamesPageChange,
@@ -222,7 +225,9 @@ const PlayerProfileView = ({
                   />
                 ))
               ) : (
-                <div className="h-48 flex items-center justify-center text-[#8b8987]">No games found</div>
+                <div className="h-48 flex items-center justify-center text-[#8b8987] px-4 text-center">
+                  {isSearchMode ? 'Your search did not match any games. Please try a new search.' : 'No games found'}
+                </div>
               )}
             </div>
 
@@ -262,7 +267,12 @@ const PlayerProfileView = ({
                   onChange={(opening) => onDetailFiltersChange((current) => ({ ...current, opening }))}
                   placeholder="Opening"
                 />
-                <SearchBox value={selectedPlayer.name} onChange={() => {}} readOnly placeholder="Player 1" />
+                <SearchBox
+                  value={primaryPlayerValue || selectedPlayer.name}
+                  onChange={onPrimaryPlayerChange || (() => {})}
+                  readOnly={!onPrimaryPlayerChange}
+                  placeholder="Player 1"
+                />
                 <SearchBox
                   value={detailFilters.player2}
                   onChange={(player2) => onDetailFiltersChange((current) => ({ ...current, player2 }))}

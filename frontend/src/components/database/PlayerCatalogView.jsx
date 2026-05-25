@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Database, Loader2, Search } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Database, Loader2 } from 'lucide-react';
 import PlayerCard from './PlayerCard';
 import SearchBox from './SearchBox';
 import { latestComments } from '../../constants/databasePlayers';
@@ -124,12 +124,12 @@ const PlayerCatalogView = ({
   playersTotal,
   playersPage,
   playersTotalPages,
-  playerSearch,
+  gameSearch,
   sortMode,
   isLoading,
   isPlayersLoading,
   notice,
-  onPlayerSearchChange,
+  onGameSearchChange,
   onSearch,
   onSortChange,
   onPlayersPageChange,
@@ -178,15 +178,6 @@ const PlayerCatalogView = ({
             </p>
           )}
         </div>
-        <form onSubmit={onSearch} className="w-full md:w-96 flex items-center bg-[#21201d] border border-[#3d3a37]">
-          <Search size={18} className="ml-3 text-[#8b8987] shrink-0" />
-          <input
-            value={playerSearch}
-            onChange={(event) => onPlayerSearchChange(event.target.value)}
-            placeholder="Search players"
-            className="w-full bg-transparent outline-none px-3 py-3 text-white placeholder:text-[#8b8987]"
-          />
-        </form>
       </header>
 
       {notice && (
@@ -293,16 +284,31 @@ const PlayerCatalogView = ({
             <p className="text-sm font-semibold mb-3">Select an opening or player to search</p>
             <form onSubmit={onSearch} className="flex flex-col gap-2">
               <div className="space-y-2">
-                <SearchBox value="" onChange={() => {}} placeholder="Opening" compact />
                 <SearchBox
-                  value={playerSearch}
-                  onChange={onPlayerSearchChange}
+                  value={gameSearch.opening}
+                  onChange={(opening) => onGameSearchChange((current) => ({ ...current, opening, openingId: '' }))}
+                  placeholder="Opening"
+                  compact
+                />
+                <SearchBox
+                  value={gameSearch.player1}
+                  onChange={(player1) => onGameSearchChange((current) => ({ ...current, player1 }))}
                   placeholder="Player 1"
                   compact
                 />
-                <SearchBox value="" onChange={() => {}} placeholder="Player 2" compact />
+                <SearchBox
+                  value={gameSearch.player2}
+                  onChange={(player2) => onGameSearchChange((current) => ({ ...current, player2 }))}
+                  placeholder="Player 2"
+                  compact
+                />
                 <label className="flex items-center gap-3 text-[#bab9b8]">
-                  <input type="checkbox" className="w-4 h-4 accent-[#81b64c]" />
+                  <input
+                    type="checkbox"
+                    checked={gameSearch.fixedColors}
+                    onChange={(event) => onGameSearchChange((current) => ({ ...current, fixedColors: event.target.checked }))}
+                    className="w-4 h-4 accent-[#81b64c]"
+                  />
                   <span className="text-sm font-semibold">Fixed Colors</span>
                 </label>
                 {isAdvancedOpen && (

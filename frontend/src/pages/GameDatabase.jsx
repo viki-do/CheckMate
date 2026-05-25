@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import DatabaseGameViewer from '../components/database/DatabaseGameViewer';
 import PlayerCatalogView from '../components/database/PlayerCatalogView';
 import PlayerProfileView from '../components/database/PlayerProfileView';
 import { API_BASE } from '../constants/databasePlayers';
 
 const DEFAULT_DETAIL_FILTERS = { opening: '', player2: '', fixedColors: false };
+const DEFAULT_GAME_SEARCH = { opening: '', openingId: '', player1: '', player2: '', fixedColors: false };
+const OPENING_IDS_BY_NAME = {
+  "english opening: anglo-indian, king's knight variation": "446",
+};
 
 const toPlayerSlug = (name) => String(name || '')
   .normalize('NFD')
@@ -20,6 +24,11 @@ const playerNameFromSlug = (slug) => String(slug || '')
   .filter(Boolean)
   .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
   .join(' ');
+
+const inferOpeningId = (opening, fallback = '') => {
+  const key = String(opening || '').trim().toLowerCase();
+  return OPENING_IDS_BY_NAME[key] || fallback || '';
+};
 
 const scrollDatabaseToTop = () => {
   requestAnimationFrame(() => {
@@ -45,7 +54,9 @@ const scrollDatabaseToAllPlayers = () => {
 
 const GameDatabase = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { playerSlug, gameId } = useParams();
+  const isSearchRoute = location.pathname === '/games/search';
   const token = localStorage.getItem('chessToken');
   const authHeaders = useMemo(() => (
     token ? { headers: { Authorization: `Bearer ${token}` } } : {}
@@ -62,6 +73,7 @@ const GameDatabase = () => {
   const [playersTotal, setPlayersTotal] = useState(0);
   const [playersPage, setPlayersPage] = useState(1);
   const [playerSearch, setPlayerSearch] = useState('');
+  const [gameSearch, setGameSearch] = useState(DEFAULT_GAME_SEARCH);
   const [sortMode, setSortMode] = useState('name');
   const [selectedPlayer, setSelectedPlayer] = useState(null);
   const [playerProfile, setPlayerProfile] = useState(null);
@@ -134,6 +146,18 @@ const GameDatabase = () => {
     }
   }, [authHeaders]);
 
+  const navigateToGameSearch = useCallback((filters = gameSearch, sort = '') => {
+    const params = new URLSearchParams({
+      opening: filters.opening || '',
+      openingId: inferOpeningId(filters.opening, filters.openingId),
+      p1: filters.player1 || '',
+      p2: filters.player2 || '',
+      sort: sort || '',
+    });
+    if (filters.fixedColors) params.set('fixedColors', 'true');
+    navigate(`/games/search?${params.toString()}`);
+  }, [gameSearch, navigate]);
+
   const fetchGameById = useCallback(async (id) => {
     setIsReplayLoading(true);
     setNotice('');
@@ -150,7 +174,7 @@ const GameDatabase = () => {
 
   useEffect(() => {
     let isMounted = true;
-    if (playerSlug || gameId) {
+    if (playerSlug || gameId || isSearchRoute) {
       setIsLoading(false);
       return () => { isMounted = false; };
     }
@@ -182,7 +206,7 @@ const GameDatabase = () => {
     loadPlayers();
     loadSummary();
     return () => { isMounted = false; };
-  }, [authHeaders]);
+  }, [authHeaders, gameId, isSearchRoute, playerSlug]);
 
   useEffect(() => {
     if (gameId) {
@@ -192,8 +216,50 @@ const GameDatabase = () => {
 
     setSelectedReplayGame(null);
 
+    if (isSearchRoute) {
+      const searchParams = new URLSearchParams(location.search);
+      const nextSearch = {
+        opening: searchParams.get('opening') || '',
+        openingId: searchParams.get('openingId') || '',
+        player1: searchParams.get('p1') || '',
+        player2: searchParams.get('p2') || '',
+        fixedColors: searchParams.get('fixedColors') === 'true',
+      };
+      const nextSort = searchParams.get('sort') || 'year_desc';
+      setGameSearch(nextSearch);
+      setDetailFilters({
+        opening: nextSearch.opening,
+        player2: nextSearch.player2,
+        fixedColors: nextSearch.fixedColors,
+      });
+      setGamesSort(nextSort);
+      if (nextSearch.player1.trim()) {
+        scrollDatabaseToTop();
+        fetchGamesForPlayer(
+          { name: nextSearch.player1.trim() },
+          1,
+          {
+            opening: nextSearch.opening,
+            player2: nextSearch.player2,
+            fixedColors: nextSearch.fixedColors,
+          },
+          nextSort,
+          true,
+        );
+      } else {
+        setSelectedPlayer(null);
+        setPlayerProfile(null);
+        setGames([]);
+        setTotalGames(0);
+        setGamesPage(1);
+      }
+      return;
+    }
+
     if (playerSlug) {
       const player = { name: playerNameFromSlug(playerSlug) };
+      const nextSearch = { ...DEFAULT_GAME_SEARCH, player1: player.name };
+      setGameSearch(nextSearch);
       scrollDatabaseToTop();
       fetchGamesForPlayer(player, 1, DEFAULT_DETAIL_FILTERS, 'year_desc', true);
       return;
@@ -204,11 +270,12 @@ const GameDatabase = () => {
     setGames([]);
     setTotalGames(0);
     setGamesPage(1);
-  }, [gameId, playerSlug, fetchGameById, fetchGamesForPlayer]);
+    setGameSearch(DEFAULT_GAME_SEARCH);
+  }, [gameId, isSearchRoute, location.search, playerSlug, fetchGameById, fetchGamesForPlayer]);
 
-  const handleSearch = async (event) => {
+  const handleSearch = (event) => {
     event.preventDefault();
-    await fetchPlayers(1, playerSearch, sortMode);
+    navigateToGameSearch(gameSearch, '');
   };
 
   const handleSortChange = async (nextSort) => {
@@ -230,12 +297,31 @@ const GameDatabase = () => {
 
   const handleDetailSearch = async () => {
     if (!selectedPlayer) return;
-    await fetchGamesForPlayer(selectedPlayer, 1, detailFilters, gamesSort);
+    const primaryPlayer = (gameSearch.player1 || selectedPlayer.name).trim();
+    if (!primaryPlayer) return;
+    navigateToGameSearch({
+      opening: detailFilters.opening,
+      openingId: gameSearch.openingId,
+      player1: primaryPlayer,
+      player2: detailFilters.player2,
+      fixedColors: detailFilters.fixedColors,
+    }, '');
   };
 
   const handleGamesSortChange = async (nextSort) => {
     setGamesSort(nextSort);
     if (!selectedPlayer) return;
+    if (isSearchRoute) {
+      const primaryPlayer = (gameSearch.player1 || selectedPlayer.name).trim();
+      navigateToGameSearch({
+        opening: detailFilters.opening,
+        openingId: gameSearch.openingId,
+        player1: primaryPlayer,
+        player2: detailFilters.player2,
+        fixedColors: detailFilters.fixedColors,
+      }, nextSort);
+      return;
+    }
     await fetchGamesForPlayer(selectedPlayer, 1, detailFilters, nextSort);
   };
 
@@ -248,6 +334,7 @@ const GameDatabase = () => {
     setGamesPage(1);
     setGamesSort('year_desc');
     setDetailFilters(DEFAULT_DETAIL_FILTERS);
+    setGameSearch(DEFAULT_GAME_SEARCH);
   };
 
   const handleSelectPlayer = (player) => {
@@ -282,8 +369,11 @@ const GameDatabase = () => {
         gamesPage={gamesPage}
         gamesTotalPages={gamesTotalPages}
         detailFilters={detailFilters}
+        primaryPlayerValue={gameSearch.player1 || selectedPlayer.name}
+        onPrimaryPlayerChange={(player1) => setGameSearch((current) => ({ ...current, player1 }))}
         gamesSort={gamesSort}
         isGamesLoading={isGamesLoading}
+        isSearchMode={isSearchRoute}
         onBack={leaveDetail}
         onDetailFiltersChange={setDetailFilters}
         onDetailSearch={handleDetailSearch}
@@ -301,12 +391,12 @@ const GameDatabase = () => {
       playersTotal={playersTotal}
       playersPage={playersPage}
       playersTotalPages={playersTotalPages}
-      playerSearch={playerSearch}
+      gameSearch={gameSearch}
       sortMode={sortMode}
       isLoading={isLoading}
       isPlayersLoading={isPlayersLoading}
       notice={notice}
-      onPlayerSearchChange={setPlayerSearch}
+      onGameSearchChange={setGameSearch}
       onSearch={handleSearch}
       onSortChange={handleSortChange}
       onPlayersPageChange={goToPlayersPage}
