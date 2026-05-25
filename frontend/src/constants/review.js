@@ -2,47 +2,47 @@ const moves = {
     brilliant: { 
         src: "/assets/moves/brilliant.png", 
         label: "Brilliant", 
-        desc: "Olyan áldozat, ami eldönti a játszmát." 
+        desc: "A sacrifice that decides the game."
     },
     great: { 
         src: "/assets/moves/great.png", 
         label: "Great", 
-        desc: "Az egyetlen lépés, ami tartja az előnyt." 
+        desc: "The only move that keeps the advantage."
     },
     best: { 
         src: "/assets/moves/best.png",
         label: "Best", 
-        desc: "A motor által javasolt legjobb lépés." 
+        desc: "The best move recommended by the engine."
     },
     excellent: { 
         src: "/assets/moves/excellent.png",
         label: "Excellent",  
-        desc: "Nagyon erős lépés." 
+        desc: "A very strong move."
     },
     good: { 
         src: "/assets/moves/good.png", 
         label: "Good", 
-        desc: "Megfelelő lépés." 
+        desc: "A reasonable move."
     },
     inaccuracy: { 
         src: "/assets/moves/dubious.png", 
         label: "Inaccuracy", 
-        desc: "Pontatlanság, ami ront az esélyeken." 
+        desc: "An inaccuracy that hurts your chances."
     },
     mistake: { 
         src: "/assets/moves/mistake.png", 
         label: "Mistake", 
-        desc: "Hiba, ami megváltoztatja az állást." 
+        desc: "A mistake that changes the position."
     },
     blunder: { 
         src: "/assets/moves/blunder.png", 
         label: "Blunder", 
-        desc: "Súlyos hiba, ami vesztő álláshoz vezet." 
+        desc: "A serious mistake that leads to a losing position."
     },
     miss: { 
         src: "/assets/moves/miss.png", 
         label: "Miss", 
-        desc: "Elszalasztott lehetőség a győzelemre." 
+        desc: "A missed opportunity to win."
     },
     book: { 
         src: "/assets/moves/book.png", 

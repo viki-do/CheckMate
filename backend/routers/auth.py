@@ -96,7 +96,7 @@ def get_current_user_id(token: str = Depends(oauth2_scheme), db: Session = Depen
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id: str = payload.get("user_id")
         if user_id is None:
-            raise HTTPException(status_code=401, detail="Érvénytelen token")
+            raise HTTPException(status_code=401, detail="Invalid token")
         user = db.query(models.User).filter(models.User.id == uuid.UUID(user_id)).first()
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
@@ -105,7 +105,7 @@ def get_current_user_id(token: str = Depends(oauth2_scheme), db: Session = Depen
             raise HTTPException(status_code=403, detail="Demo mode has expired")
         return user_id
     except jwt.PyJWTError:
-        raise HTTPException(status_code=401, detail="Lejárt vagy hibás munkamenet")
+        raise HTTPException(status_code=401, detail="Session expired or invalid")
 
 # Pydantic modellek
 class UserCreate(BaseModel):
@@ -316,7 +316,7 @@ def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
     if not password_meets_requirements(user_data.password):
         raise HTTPException(status_code=400, detail=PASSWORD_REQUIREMENTS_MESSAGE)
     existing_user = db.query(models.User).filter((models.User.username == user_data.username) | (models.User.email == user_data.email)).first()
-    if existing_user: raise HTTPException(status_code=400, detail="Már létezik ilyen felhasználó!")
+    if existing_user: raise HTTPException(status_code=400, detail="A user with this username or email already exists.")
     hashed_pwd = pwd_context.hash(user_data.password)
     new_user = models.User(
         id=uuid.uuid4(),
@@ -332,13 +332,13 @@ def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
         demo_access.consumed_at = utc_now()
     db.commit()
     db.refresh(new_user)
-    return {"message": "Sikeres regisztráció!", "user_id": str(new_user.id)}
+    return {"message": "Registration successful.", "user_id": str(new_user.id)}
 
 @router.post("/login")
 def login(data: UserLogin, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.username == data.username).first()
     if not user or not pwd_context.verify(data.password, user.password_hash): 
-        raise HTTPException(status_code=401, detail="Hibás adatok!")
+        raise HTTPException(status_code=401, detail="Invalid credentials")
     demo_expires_at = normalize_db_datetime(user.demo_expires_at)
     if user.is_demo and demo_expires_at and utc_now() >= demo_expires_at:
         raise HTTPException(status_code=403, detail="Demo mode has expired")
@@ -434,13 +434,13 @@ async def auth_facebook(request: Request, db: Session = Depends(get_db)):
 @router.get("/profile")
 def get_profile(user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.id == uuid.UUID(user_id)).first()
-    if not user: raise HTTPException(status_code=404, detail="Nem található")
+    if not user: raise HTTPException(status_code=404, detail="Not found")
     return profile_payload(user)
 
 @router.put("/profile")
 def update_profile(data: UserProfileUpdate, user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.id == uuid.UUID(user_id)).first()
-    if not user: raise HTTPException(status_code=404, detail="Nem talÃ¡lhatÃ³")
+    if not user: raise HTTPException(status_code=404, detail="Not found")
 
     if data.bio is not None:
         user.bio = data.bio[:50]
@@ -463,7 +463,7 @@ async def upload_avatar(
 ):
     user = db.query(models.User).filter(models.User.id == uuid.UUID(user_id)).first()
     if not user:
-        raise HTTPException(status_code=404, detail="Nem talÃ¡lhatÃ³")
+        raise HTTPException(status_code=404, detail="Not found")
 
     extension = ALLOWED_AVATAR_TYPES.get(file.content_type)
     if not extension:
@@ -489,7 +489,7 @@ async def upload_avatar(
 def delete_avatar(user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.id == uuid.UUID(user_id)).first()
     if not user:
-        raise HTTPException(status_code=404, detail="Nem talÃ¡lhatÃ³")
+        raise HTTPException(status_code=404, detail="Not found")
 
     delete_avatar_file(user.avatar_url)
     user.avatar_url = None
@@ -501,7 +501,7 @@ def delete_avatar(user_id: str = Depends(get_current_user_id), db: Session = Dep
 def change_username(data: UsernameChangeRequest, user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.id == uuid.UUID(user_id)).first()
     if not user:
-        raise HTTPException(status_code=404, detail="Nem talÃƒÂ¡lhatÃƒÂ³")
+        raise HTTPException(status_code=404, detail="Not found")
 
     if not user.password_hash or not pwd_context.verify(data.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Incorrect password")
@@ -535,7 +535,7 @@ def check_username_availability(
 ):
     user = db.query(models.User).filter(models.User.id == uuid.UUID(user_id)).first()
     if not user:
-        raise HTTPException(status_code=404, detail="Nem talÃƒÂ¡lhatÃƒÂ³")
+        raise HTTPException(status_code=404, detail="Not found")
 
     next_username = username.strip()
     if not next_username:
@@ -559,7 +559,7 @@ def check_username_availability(
 def change_password(data: PasswordChangeRequest, user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.id == uuid.UUID(user_id)).first()
     if not user:
-        raise HTTPException(status_code=404, detail="Nem talÃƒÆ’Ã‚Â¡lhatÃƒÆ’Ã‚Â³")
+        raise HTTPException(status_code=404, detail="Not found")
 
     if not user.password_hash:
         raise HTTPException(status_code=400, detail="Password changes are unavailable for this account")

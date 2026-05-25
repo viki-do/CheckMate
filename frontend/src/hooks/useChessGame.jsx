@@ -696,7 +696,7 @@ const handleMouseDown = (e, row, col) => {
     };
 
     const handleResign = async () => {
-        if (!window.confirm("Biztosan feladod vagy kilépsz?")) return;
+        if (!window.confirm("Are you sure you want to resign or leave?")) return;
         if (!gameId || !token) return;
         try {
             setActiveTimeColor(null);
@@ -714,7 +714,7 @@ const handleMouseDown = (e, row, col) => {
     };
 
     const offerDraw = async () => {
-        if (!window.confirm("Döntetlent ajánlasz?")) return;
+        if (!window.confirm("Offer a draw?")) return;
         if (!gameId || !token) return;
         try {
             const res = await axios.post(`${API_BASE}/offer-draw`,

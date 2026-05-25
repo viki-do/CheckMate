@@ -28,11 +28,11 @@ const RegisterPage = () => {
         ...registerForm,
         demo_token: activeDemoToken || undefined,
       });
-      alert("Sikeres regisztráció! Most már bejelentkezhetsz.");
+      alert("Registration successful. You can now sign in.");
       navigate('/login');
     } catch (err) {
       console.error(err);
-      alert(err.response?.data?.detail || "Hiba a regisztráció során");
+      alert(err.response?.data?.detail || "Registration failed");
     }
   };
 

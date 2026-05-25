@@ -6,9 +6,9 @@ const ReviewDashboard = ({ data }) => {
     const { overall_accuracy, summary } = data;
 
     const phaseLabels = {
-        opening: "Megnyitás",
-        middlegame: "Középjáték",
-        endgame: "Végjáték"
+        opening: "Opening",
+        middlegame: "Middlegame",
+        endgame: "Endgame"
     };
 
     return (
@@ -16,7 +16,7 @@ const ReviewDashboard = ({ data }) => {
             {/* Accuracy Header */}
             <div className="flex items-center justify-between mb-6">
                 <div>
-                    <h3 className="text-[#8b8987] text-xs font-black uppercase tracking-widest">Pontosság</h3>
+                    <h3 className="text-[#8b8987] text-xs font-black uppercase tracking-widest">Accuracy</h3>
                     <div className="text-4xl font-black text-white">{overall_accuracy}%</div>
                 </div>
                 <div className="w-16 h-16 rounded-full border-4 border-[#81b64c] flex items-center justify-center bg-[#81b64c]/10">
@@ -49,8 +49,8 @@ const ReviewDashboard = ({ data }) => {
                 <i className="fas fa-quote-left text-[#81b64c]/20 absolute top-2 left-2 text-2xl"></i>
                 <p className="text-[#bab9b8] text-sm italic pl-4 leading-relaxed">
                     {overall_accuracy > 85 
-                        ? "Lenyűgöző játék! A középjátékban mutatott pontosságod döntő volt." 
-                        : "Voltak jó pillanataid, de a végjátékban elkövetett hibák megpecsételték a sorsodat."}
+                        ? "Impressive game. Your middlegame accuracy made the difference."
+                        : "You had some good moments, but the endgame mistakes decided the result."}
                 </p>
             </div>
         </div>

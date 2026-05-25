@@ -18,7 +18,7 @@ const LoginPage = () => {
     const error = params.get('error');
 
     if (error) {
-      alert("Hiba történt a közösségi bejelentkezés során! Próbáld újra.");
+      alert("Social sign-in failed. Please try again.");
       window.history.replaceState({}, document.title, "/login"); 
       return;
     }
@@ -47,7 +47,7 @@ const LoginPage = () => {
       window.location.reload(); 
     } catch (err) { 
       console.error(err); 
-      alert("Hibás belépési adatok!");
+      alert("Invalid login credentials.");
     }
   };
 
