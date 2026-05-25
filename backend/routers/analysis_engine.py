@@ -9,10 +9,12 @@ import chess.polyglot
 class ChessCoachEngine:
     def __init__(self, book_bin_path="data/titans.bin"):
         self.WIN_CHANCE_CONSTANT = 400.0
-        self.REVIEW_DEPTH = 14
-        self.PLAYED_MOVE_DEPTH = 12
-        self.REVIEW_NODES = 180000
-        self.PLAYED_MOVE_NODES = 90000
+        self.REVIEW_DEPTH = self._int_env("REVIEW_DEPTH", 10, 1)
+        self.PLAYED_MOVE_DEPTH = self._int_env("PLAYED_MOVE_DEPTH", 8, 1)
+        self.REVIEW_NODES = self._int_env("REVIEW_NODES", 35000, 1000)
+        self.PLAYED_MOVE_NODES = self._int_env("PLAYED_MOVE_NODES", 10000, 1000)
+        self.REVIEW_TIME_SEC = self._float_env("REVIEW_TIME_SEC", 0.16, 0.02)
+        self.PLAYED_MOVE_TIME_SEC = self._float_env("PLAYED_MOVE_TIME_SEC", 0.04, 0.02)
         self.ACCURACY_EXPONENT = 32
         self.book_bin_path = book_bin_path
         self.phase_thresholds = {
@@ -57,6 +59,20 @@ class ChessCoachEngine:
             },
         }
 
+    def _int_env(self, name, default, minimum=None):
+        try:
+            value = int(os.getenv(name, default))
+        except (TypeError, ValueError):
+            value = default
+        return max(minimum, value) if minimum is not None else value
+
+    def _float_env(self, name, default, minimum=None):
+        try:
+            value = float(os.getenv(name, default))
+        except (TypeError, ValueError):
+            value = default
+        return max(minimum, value) if minimum is not None else value
+
     def get_win_chance(self, cp_score):
         if cp_score is None:
             return 0.5
@@ -98,12 +114,14 @@ class ChessCoachEngine:
         return chess.engine.Limit(
             depth=depth or self.REVIEW_DEPTH,
             nodes=nodes or self.REVIEW_NODES,
+            time=self.REVIEW_TIME_SEC,
         )
 
     def played_move_limit(self, depth=None, nodes=None):
         return chess.engine.Limit(
             depth=depth or self.PLAYED_MOVE_DEPTH,
             nodes=nodes or self.PLAYED_MOVE_NODES,
+            time=self.PLAYED_MOVE_TIME_SEC,
         )
 
     def analyze_position_deep(self, board, engine, depth=None, nodes=None, multipv=3):

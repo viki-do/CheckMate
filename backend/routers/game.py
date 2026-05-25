@@ -66,6 +66,12 @@ def get_int_env(name: str, default: int, minimum: int | None = None, maximum: in
         value = min(maximum, value)
     return value
 
+def get_review_multipv(default: int = 2) -> int:
+    return get_int_env("REVIEW_MULTIPV", default, 1, 3)
+
+def get_bot_multipv(default: int = 3) -> int:
+    return get_int_env("BOT_MULTIPV", default, 1, 5)
+
 def configure_engine_for_analysis(engine):
     global engine_mode
     if engine_mode == "analysis":
@@ -145,7 +151,7 @@ def get_bot_move_with_optional_engine(board: chess.Board, bot_style: str, bot_el
         pure_stockfish = bot_style in {"stockfish", "engine", "top_player"} or bot_id == "engine"
         configure_engine_for_elo(engine, bot_elo)
         limit_params = get_bot_limit_params(bot_elo, pure_stockfish)
-        analysis = engine.analyse(board, chess.engine.Limit(**limit_params), multipv=5)
+        analysis = engine.analyse(board, chess.engine.Limit(**limit_params), multipv=get_bot_multipv())
         return choose_styled_bot_move(board, analysis, bot_style, bot_elo), analysis
     except Exception as exc:
         print(f"Stockfish unavailable, using fallback bot move: {exc}")
@@ -219,11 +225,11 @@ def analyze_full_game(game_id: str, user_id: str = Depends(get_current_user_id),
         is_book = book_info is not None
 
         # Multi-PV elemzés
-        analysis = engine.analyse(board, coach.review_limit(), multipv=3)
+        analysis = engine.analyse(board, coach.review_limit(), multipv=get_review_multipv())
         best_eval_info = analysis[0]["score"].white().score(mate_score=10000)
         
         # Címkézés
-        played_eval = get_played_eval(board, player_move, engine, analysis)
+        played_eval = None if is_book else get_played_eval(board, player_move, engine, analysis)
         label, move_eval = coach.classify_move(
             board,
             player_move,
@@ -509,7 +515,7 @@ def analyze_sandbox_move(data: dict):
         
         # Mélyelemzés megkísérlése
         try:
-            deep_res = coach.analyze_position_deep(board, engine, depth=10, nodes=60000, multipv=3)
+            deep_res = coach.analyze_position_deep(board, engine, depth=10, nodes=60000, multipv=get_review_multipv())
         except Exception as e:
             print(f"Mélyelemzési hiba: {e}")
 
@@ -517,7 +523,7 @@ def analyze_sandbox_move(data: dict):
         # Ilyenkor ugyanazzal a mélységgel lefuttatunk egy közvetlen engine elemzést.
         if not deep_res.get("engine_lines"):
             try:
-                analysis = engine.analyse(board, coach.review_limit(depth=10, nodes=60000), multipv=3)
+                analysis = engine.analyse(board, coach.review_limit(depth=10, nodes=60000), multipv=get_review_multipv())
                 engine_lines = []
 
                 for entry in analysis:
@@ -570,13 +576,13 @@ def analyze_sandbox_move(data: dict):
         except:
             pass
 
-        played_eval = get_played_eval(board, player_move, engine, deep_res.get("raw_analysis", []))
+        played_eval = None if opening_data is not None else get_played_eval(board, player_move, engine, deep_res.get("raw_analysis", []))
         post_move_engine_lines = []
         try:
-            post_move_res = coach.analyze_position_deep(temp_board, engine, depth=10, nodes=60000, multipv=3)
+            post_move_res = coach.analyze_position_deep(temp_board, engine, depth=10, nodes=60000, multipv=get_review_multipv())
             post_move_engine_lines = post_move_res.get("engine_lines", [])
             if not post_move_engine_lines:
-                post_move_analysis = engine.analyse(temp_board, coach.review_limit(depth=10, nodes=60000), multipv=3)
+                post_move_analysis = engine.analyse(temp_board, coach.review_limit(depth=10, nodes=60000), multipv=get_review_multipv())
                 for entry in post_move_analysis:
                     pv_moves = entry.get("pv", [])
                     if not pv_moves:
@@ -671,10 +677,10 @@ def analyze_full_game_sandbox(data: dict):
         is_book = book_info is not None
 
         # Multi-PV elemzés gyors game review beállításokkal.
-        analysis = engine.analyse(board, coach.review_limit(), multipv=3)
+        analysis = engine.analyse(board, coach.review_limit(), multipv=get_review_multipv())
         
         # Címkézés (label, eval)
-        played_eval = get_played_eval(board, player_move, engine, analysis)
+        played_eval = None if is_book else get_played_eval(board, player_move, engine, analysis)
         label, move_eval = coach.classify_move(
             board,
             player_move,
