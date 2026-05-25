@@ -396,6 +396,18 @@ const AnalyzeBoard = () => {
     } = chessContext;
     const userAvatarSrc = profileAvatarSrc(userAvatarUrl);
 
+    const clearBoardInteraction = useCallback(() => {
+        setSelectedSquare(null);
+        setValidMoves([]);
+        setHoverSquare(null);
+        setIsDragging(false);
+        setPendingPromotion(null);
+    }, [setSelectedSquare, setValidMoves, setHoverSquare, setIsDragging]);
+
+    useEffect(() => {
+        clearBoardInteraction();
+    }, [location.pathname, clearBoardInteraction]);
+
     useEffect(() => {
         if (!token || !API_BASE) return;
 
@@ -659,6 +671,7 @@ const AnalyzeBoard = () => {
             setMasterReviewStarted(false);
             setIsSandboxReviewComplete(false);
             setIsSandboxReviewLocked(false);
+            clearBoardInteraction();
             try {
                 const res = await axios.get(`${API_BASE}/game/${botAnalysisGameId}/history`, {
                     headers: { Authorization: `Bearer ${token}` },
@@ -783,7 +796,7 @@ const AnalyzeBoard = () => {
 
         loadBotGame();
         return () => { isMounted = false; };
-    }, [isBotSelfAnalysisRoute, isBotReviewRoute, botAnalysisGameId, API_BASE, token, userAvatarSrc]);
+    }, [isBotSelfAnalysisRoute, isBotReviewRoute, botAnalysisGameId, API_BASE, token, userAvatarSrc, clearBoardInteraction]);
 
     useEffect(() => {
         if (isMasterReviewRoute || isCollectionAnalysisRoute || isSavedAnalysisRoute || isPgnReviewRoute || isBotSelfAnalysisRoute || isBotReviewRoute) return;
@@ -1383,6 +1396,7 @@ const handleFullReview = async ({ stayOnIntro = false } = {}) => {
             setSandboxFen(sandboxStartingFen || DEFAULT_FEN);
             setSandboxLastMove({ from: null, to: null });
             setViewIndex(-2);
+            clearBoardInteraction();
             return;
         }
 
@@ -1400,6 +1414,7 @@ const handleFullReview = async ({ stayOnIntro = false } = {}) => {
             setSandboxFen(sandboxStartingFen || DEFAULT_FEN);
             setSandboxLastMove({ from: null, to: null });
             setViewIndex(-2);
+            clearBoardInteraction();
             return;
         }
 
@@ -1438,6 +1453,7 @@ const handleFullReview = async ({ stayOnIntro = false } = {}) => {
         setSandboxFen(sandboxStartingFen || DEFAULT_FEN);
         setSandboxLastMove({ from: null, to: null });
         setViewIndex(-2);
+        clearBoardInteraction();
     };
 
     const handleStartAnalysis = async (analysisInput = '') => {
@@ -1926,6 +1942,7 @@ const handleExternalDrop = (e, row, col) => {
             setSandboxFen(sandboxStartingFen || DEFAULT_FEN);
             setSandboxLastMove({ from: null, to: null });
             setViewIndex(-2);
+            clearBoardInteraction();
             return;
         }
 
