@@ -12,6 +12,7 @@ import { findBotByGameData } from '../components/game-board/gameBoardUtils.js';
 import { getHistoryNavigationSoundName } from '../hooks/chess-game/soundUtils';
 import SaveCollectionModal from '../components/analyze-board/SaveCollectionModal.jsx';
 import AnalyzeEvalBar from '../components/analyze-board/AnalyzeEvalBar.jsx';
+import { profileAvatarSrc } from '../config/api.js';
 
 const DEFAULT_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
@@ -36,6 +37,16 @@ const normalizeEvalForBar = (value, fallback = 0) => {
     }
     const numeric = Number(value);
     return Number.isFinite(numeric) ? numeric : fallback;
+};
+
+const findPreviousKnownEval = (history = [], fromIndex = history.length) => {
+    for (let i = Math.min(fromIndex - 1, history.length - 1); i >= 0; i -= 1) {
+        const value = history[i]?.eval;
+        if (value !== undefined && value !== null) {
+            return value;
+        }
+    }
+    return undefined;
 };
 
 const GameBoard = () => {
@@ -75,7 +86,7 @@ const GameBoard = () => {
         whiteTime, blackTime, activeTimeColor, setBlackTime, setWhiteTime,
         lastTimeControl, opening, executeMove, setHistory, handleMouseDown, handleMouseUp,
     } = gameLogic;
-    const userAvatarSrc = userAvatarUrl ? `${API_BASE}${userAvatarUrl}` : "";
+    const userAvatarSrc = profileAvatarSrc(userAvatarUrl);
 
     // --- ÚJ FÜGGVÉNYEK ---
 
@@ -89,9 +100,10 @@ const GameBoard = () => {
     const displayFen = shouldShowDefaultBoard ? DEFAULT_FEN : fen;
     const displayedHistoryIndex = viewIndex === -1 ? history.length - 1 : Number.parseInt(viewIndex, 10);
     const displayedHistoryMove = Number.isInteger(displayedHistoryIndex) ? history[displayedHistoryIndex] : null;
+    const previousKnownEval = findPreviousKnownEval(history, displayedHistoryIndex);
     const currentEvalValue = normalizeEvalForBar(
         displayedHistoryMove?.eval ?? positionEvalByFen[displayFen],
-        0
+        normalizeEvalForBar(previousKnownEval, 0)
     );
     const whiteBarHeight = Math.min(Math.max(50 + (currentEvalValue * 10), 5), 95);
     const shouldShowEvalBar = (location.pathname === '/play/bots' && !shouldShowDefaultBoard) || isBotGameRoute || Boolean(archiveGameId);

@@ -1,5 +1,6 @@
 import { CapturedRow } from '../MaterialAdvantage';
 import GameClock from './GameClock';
+import { profileAvatarSrc, useDefaultAvatarOnError } from '../../config/api';
 
 const PlayerInfoBar = ({
     type,
@@ -28,19 +29,12 @@ const PlayerInfoBar = ({
                         <i className="fas fa-robot text-[#808080] text-xl"></i>
                     )
                 ) : (
-                    userAvatarUrl ? (
-                        <img
-                            src={userAvatarUrl}
-                            alt=""
-                            className="w-full h-full object-cover"
-                        />
-                    ) : (
-                        <img
-                            src="/assets/icons/noavatar.gif"
-                            alt=""
-                            className="w-full h-full object-cover opacity-55"
-                        />
-                    )
+                    <img
+                        src={profileAvatarSrc(userAvatarUrl)}
+                        alt=""
+                        onError={useDefaultAvatarOnError}
+                        className={`w-full h-full object-cover ${userAvatarUrl ? '' : 'opacity-55'}`}
+                    />
                 )}
             </div>
             <div className="flex flex-col justify-center">

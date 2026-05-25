@@ -36,6 +36,7 @@ import {
     saveCurrentAnalysisDraft,
     writeLocalAnalysisDraft,
 } from '../services/analysisDraftsService';
+import { profileAvatarSrc } from '../config/api';
 
 const COLLECTIONS_STORAGE_KEY = 'checkmate_game_collections';
 const SAVED_ANALYSES_STORAGE_KEY = 'checkmate_saved_analyses';
@@ -44,6 +45,25 @@ const PUBLIC_ID_CHARS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ012
 const createAnalysisSessionId = () => (
     Array.from(crypto.getRandomValues(new Uint32Array(10)), (value) => PUBLIC_ID_CHARS[value % PUBLIC_ID_CHARS.length]).join('')
 );
+
+const normalizeEvalForBar = (value, fallback = 0) => {
+    if (typeof value === 'string' && value.startsWith('M')) {
+        const mateValue = Number(value.slice(1));
+        if (Number.isFinite(mateValue)) return mateValue >= 0 ? 9 : -9;
+    }
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : fallback;
+};
+
+const findPreviousKnownEval = (history = [], fromIndex = history.length) => {
+    for (let i = Math.min(fromIndex - 1, history.length - 1); i >= 0; i -= 1) {
+        const value = history[i]?.eval;
+        if (value !== undefined && value !== null) {
+            return value;
+        }
+    }
+    return undefined;
+};
 
 const extractPublicIdFromSlug = (slug) => String(slug || '').split('-').pop();
 
@@ -374,9 +394,7 @@ const AnalyzeBoard = () => {
         token, playSound, setMousePos, setDragOffset, 
         setHoverSquare, hoverSquare, mousePos
     } = chessContext;
-    const userAvatarSrc = userAvatarUrl
-        ? (String(userAvatarUrl).startsWith('http') ? userAvatarUrl : `${API_BASE}${userAvatarUrl}`)
-        : '';
+    const userAvatarSrc = profileAvatarSrc(userAvatarUrl);
 
     useEffect(() => {
         if (!token || !API_BASE) return;
@@ -1701,11 +1719,16 @@ const handleExternalDrop = (e, row, col) => {
     const captured = getCapturedPieces(currentFen);
     const materialDiff = getMaterialDiff(captured);
 
+    const activeHistoryIndex = viewIndex === -1 ? sandboxHistory.length - 1 : Number.parseInt(viewIndex, 10);
+    const previousKnownEval = findPreviousKnownEval(sandboxHistory, activeHistoryIndex);
     const currentEvalValue = viewIndex === -1
         ? (sandboxHistory.length > 0
-            ? (sandboxHistory[sandboxHistory.length - 1].eval ?? 0)
-            : (initialAnalysis?.eval ?? 0))
-        : (sandboxHistory[viewIndex]?.eval ?? initialAnalysis?.eval ?? 0);
+            ? normalizeEvalForBar(sandboxHistory[sandboxHistory.length - 1].eval, normalizeEvalForBar(previousKnownEval, initialAnalysis?.eval ?? 0))
+            : normalizeEvalForBar(initialAnalysis?.eval, 0))
+        : normalizeEvalForBar(
+            sandboxHistory[activeHistoryIndex]?.eval,
+            normalizeEvalForBar(previousKnownEval, initialAnalysis?.eval ?? 0)
+        );
     const whiteBarHeight = Math.min(Math.max(50 + (currentEvalValue * 10), 5), 95);
     const hasActiveSandboxState =
         sandboxHistory.length > 0 ||

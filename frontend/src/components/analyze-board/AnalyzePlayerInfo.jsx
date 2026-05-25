@@ -1,6 +1,7 @@
 import { Settings } from 'lucide-react';
 import AnalyzeCapturedRow from './AnalyzeCapturedRow';
 import { getPlayerImage } from '../../utils/databaseFormatters';
+import { useDefaultAvatarOnError } from '../../config/api';
 
 const AnalyzePlayerInfo = ({ color, pieces, diff, onDragOver, playerName, playerImage }) => {
     const isWhite = color === 'white';
@@ -20,7 +21,12 @@ const AnalyzePlayerInfo = ({ color, pieces, diff, onDragOver, playerName, player
                             : (isWhite ? 'bg-[#eeeeec] border border-black/10 shadow-sm' : 'bg-[#3a3936] border border-white/5')
                     }`}>
                         {image ? (
-                            <img src={image} alt={displayName} className="w-full h-full object-cover object-top" />
+                            <img
+                                src={image}
+                                alt={displayName}
+                                onError={useDefaultAvatarOnError}
+                                className="w-full h-full object-cover object-top"
+                            />
                         ) : (
                             <i className={`fas fa-user text-[26px] ${isWhite ? 'text-[#d0d0ce]' : 'text-[#151515]'}`}></i>
                         )}

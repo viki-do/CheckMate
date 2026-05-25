@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ChevronDown, ChevronUp, Search, Star } from 'lucide-react';
 import { moves as moveAssets } from '../../constants/review';
 import { getPlayerImage } from '../../utils/databaseFormatters';
+import { useDefaultAvatarOnError } from '../../config/api';
 
 const SUMMARY_REVIEW_ROWS = [
   { key: 'brilliant', label: 'Brilliant', textColor: 'text-[#35d7bd]' },
@@ -71,7 +72,12 @@ const PlayerAvatar = ({ name, imageSrc, isWinner = false }) => {
       isWinner ? 'border-4 border-[#81b64c]' : ''
     }`}>
       {image ? (
-        <img src={image} alt={name} className="w-full h-full object-cover object-top" />
+        <img
+          src={image}
+          alt={name}
+          onError={useDefaultAvatarOnError}
+          className="w-full h-full object-cover object-top"
+        />
       ) : (
         <img src={DEFAULT_AVATAR_SRC} alt="" className="w-full h-full object-cover opacity-70" />
       )}
