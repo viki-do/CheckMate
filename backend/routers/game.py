@@ -21,6 +21,7 @@ coach = ChessCoachEngine()
 
 # Globális változó a motornak
 engine_singleton = None
+engine_mode = None
 
 def resolve_stockfish_path():
     env_path = os.getenv("STOCKFISH_PATH")
@@ -39,6 +40,7 @@ def get_engine():
     if engine_singleton is None:
         try:
             engine_singleton = chess.engine.SimpleEngine.popen_uci(STOCKFISH_PATH)
+            configure_engine_for_analysis(engine_singleton)
         except Exception as e:
             print(f"Hiba a Stockfish indításakor: {e}")
             raise e
@@ -52,6 +54,54 @@ PIECE_VALUES = {
     chess.QUEEN: 900,
     chess.KING: 0,
 }
+
+def get_int_env(name: str, default: int, minimum: int | None = None, maximum: int | None = None) -> int:
+    try:
+        value = int(os.getenv(name, default))
+    except (TypeError, ValueError):
+        value = default
+    if minimum is not None:
+        value = max(minimum, value)
+    if maximum is not None:
+        value = min(maximum, value)
+    return value
+
+def configure_engine_for_analysis(engine):
+    global engine_mode
+    if engine_mode == "analysis":
+        return
+
+    options = getattr(engine, "options", {})
+    config = {}
+
+    if "UCI_LimitStrength" in options:
+        config["UCI_LimitStrength"] = False
+    if "Skill Level" in options:
+        config["Skill Level"] = 20
+    if "Threads" in options:
+        config["Threads"] = get_int_env("STOCKFISH_THREADS", 1, 1, options["Threads"].max)
+    if "Hash" in options:
+        config["Hash"] = get_int_env("STOCKFISH_HASH_MB", 128, 16, options["Hash"].max)
+
+    if config:
+        try:
+            engine.configure(config)
+        except Exception as exc:
+            print(f"Stockfish review config skipped: {exc}")
+    engine_mode = "analysis"
+
+def played_eval_from_root_analysis(analysis, move):
+    for entry in analysis or []:
+        pv = entry.get("pv", [])
+        if pv and pv[0] == move:
+            return entry["score"].white().score(mate_score=10000)
+    return None
+
+def get_played_eval(board, move, engine, analysis=None):
+    root_eval = played_eval_from_root_analysis(analysis, move)
+    if root_eval is not None:
+        return root_eval
+    return coach.evaluate_played_move_after(board, move, engine)
 
 def choose_fallback_bot_move(board: chess.Board, elo: int = 800):
     legal_moves = list(board.legal_moves)
@@ -133,6 +183,7 @@ def analyze_full_game(game_id: str, user_id: str = Depends(get_current_user_id),
         raise HTTPException(status_code=404, detail="Game or moves not found")
 
     engine = get_engine()
+    configure_engine_for_analysis(engine)
     board = chess.Board()
     coach = ChessCoachEngine()
     full_analysis = []
@@ -172,7 +223,7 @@ def analyze_full_game(game_id: str, user_id: str = Depends(get_current_user_id),
         best_eval_info = analysis[0]["score"].white().score(mate_score=10000)
         
         # Címkézés
-        played_eval = coach.evaluate_played_move_after(board, player_move, engine)
+        played_eval = get_played_eval(board, player_move, engine, analysis)
         label, move_eval = coach.classify_move(
             board,
             player_move,
@@ -286,6 +337,7 @@ def get_skill_level_from_elo(elo: int) -> int:
     return max(0, min(20, level))
 
 def configure_engine_for_elo(engine, elo: int):
+    global engine_mode
     skill = get_skill_level_from_elo(elo)
     config = {"Skill Level": skill}
 
@@ -306,6 +358,7 @@ def configure_engine_for_elo(engine, elo: int):
         engine.configure(config)
     except Exception:
         engine.configure({"Skill Level": skill})
+    engine_mode = "bot"
 
 def get_bot_limit_params(elo: int, pure_stockfish: bool = False):
     if elo < 500:
@@ -449,6 +502,7 @@ def analyze_sandbox_move(data: dict):
             }
 
         engine = get_engine()
+        configure_engine_for_analysis(engine)
         
         # Alapértelmezett üres válasz struktúra
         deep_res = {"eval": prev_eval, "best_move": "", "engine_lines": [], "raw_analysis": []}
@@ -516,7 +570,7 @@ def analyze_sandbox_move(data: dict):
         except:
             pass
 
-        played_eval = coach.evaluate_played_move_after(board, player_move, engine)
+        played_eval = get_played_eval(board, player_move, engine, deep_res.get("raw_analysis", []))
         post_move_engine_lines = []
         try:
             post_move_res = coach.analyze_position_deep(temp_board, engine, depth=10, nodes=60000, multipv=3)
@@ -590,6 +644,7 @@ def analyze_full_game_sandbox(data: dict):
         return {"analysis": []}
 
     engine = get_engine()
+    configure_engine_for_analysis(engine)
     # A táblát a megadott kezdőpozícióval inicializáljuk!
     board = chess.Board(initial_fen)
     coach = ChessCoachEngine()
@@ -619,7 +674,7 @@ def analyze_full_game_sandbox(data: dict):
         analysis = engine.analyse(board, coach.review_limit(), multipv=3)
         
         # Címkézés (label, eval)
-        played_eval = coach.evaluate_played_move_after(board, player_move, engine)
+        played_eval = get_played_eval(board, player_move, engine, analysis)
         label, move_eval = coach.classify_move(
             board,
             player_move,
