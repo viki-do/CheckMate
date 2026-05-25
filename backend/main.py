@@ -18,6 +18,7 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 UPLOAD_ROOT = os.path.join(os.path.dirname(__file__), "uploads")
 os.makedirs(os.path.join(UPLOAD_ROOT, "avatars"), exist_ok=True)
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173").rstrip("/")
+CORS_ALLOW_ORIGIN_REGEX = os.getenv("CORS_ALLOW_ORIGIN_REGEX", r"https://.*\.onrender\.com")
 CORS_ORIGINS = [
     origin.strip().rstrip("/")
     for origin in os.getenv("CORS_ORIGINS", "").split(",")
@@ -114,6 +115,7 @@ app.mount("/uploads", StaticFiles(directory=UPLOAD_ROOT), name="uploads")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=CORS_ALLOW_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -157,4 +159,11 @@ def home():
     return {"status": "Online"}
 
 
-socket_app = socketio.ASGIApp(sio, app)
+socket_app = CORSMiddleware(
+    socketio.ASGIApp(sio, app),
+    allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=CORS_ALLOW_ORIGIN_REGEX,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
