@@ -103,7 +103,7 @@ except Exception as exc:
 # 1. Létrehozzuk az aszinkron Socket.io szervert
 sio = socketio.AsyncServer(
     async_mode='asgi',
-    cors_allowed_origins=ALLOWED_ORIGINS
+    cors_allowed_origins=[]
 )
 
 # 2. Létrehozzuk a FastAPI appot
