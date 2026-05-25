@@ -81,7 +81,7 @@ def configure_engine_for_analysis(engine):
     if "Threads" in options:
         config["Threads"] = get_int_env("STOCKFISH_THREADS", 1, 1, options["Threads"].max)
     if "Hash" in options:
-        config["Hash"] = get_int_env("STOCKFISH_HASH_MB", 80, 16, options["Hash"].max)
+        config["Hash"] = get_int_env("STOCKFISH_HASH_MB", 70, 16, options["Hash"].max)
 
     if config:
         try:
