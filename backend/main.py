@@ -26,6 +26,7 @@ CORS_ORIGINS = [
 ALLOWED_ORIGINS = sorted(set([
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "https://checkmate-sqk9.onrender.com",
     FRONTEND_URL,
     *CORS_ORIGINS,
 ]))
