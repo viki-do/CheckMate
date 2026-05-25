@@ -43,8 +43,8 @@ def get_db():
         db.close()
 
 
-def serialize_game(game):
-    detected_opening = get_detected_opening(game.moves, game.result, game.eco, game.opening)
+def serialize_game(game, include_detected_opening=True):
+    detected_opening = get_detected_opening(game.moves, game.result, game.eco, game.opening) if include_detected_opening else None
     return {
         "id": game.id,
         "event": game.event,
@@ -260,9 +260,9 @@ def player_game_clause(player_variants):
     return f"({white} IN ({player_sql}) OR {black} IN ({player_sql}))"
 
 
-def serialize_game_row(row):
+def serialize_game_row(row, include_detected_opening=False):
     data = row._mapping
-    detected_opening = get_detected_opening(data["moves"], data["result"], data["eco"], data["opening"])
+    detected_opening = get_detected_opening(data["moves"], data["result"], data["eco"], data["opening"]) if include_detected_opening else None
     return {
         "id": data["id"],
         "event": data["event"],
@@ -601,52 +601,22 @@ def player_profile(
         query_params["master_object_key"] = master_object_key
         query_params["master_player_slug"] = master_object_key.split("/")[-2]
         query_params["master_object_prefix"] = master_object_prefix
+
     white_name = sql_player_name("white")
     black_name = sql_player_name("black")
     player_sql = placeholders("player", variants)
     source_table = "unique_master_games" if master_object_key else "imported_games"
     source_prefix = unique_master_games_cte() if master_object_key else ""
     source_where = "" if master_object_key else f"WHERE {where_clause}"
-
-    total_games = int(db.execute(text(f"""
-        {source_prefix}
-        SELECT COUNT(*)
-        FROM {source_table}
-        {source_where}
-    """), query_params).scalar() or 0)
-
     player_is_white = f"{white_name} IN ({player_sql})"
     player_is_black = f"{black_name} IN ({player_sql})"
     player_is_present = f"({player_is_white} OR {player_is_black})"
-
-    row = db.execute(text(f"""
-        {source_prefix}
-        SELECT
-            COUNT(*) FILTER (WHERE {player_is_white}) AS as_white,
-            COUNT(*) FILTER (WHERE {player_is_black}) AS as_black,
-            COUNT(*) FILTER (
-                WHERE ({player_is_white} AND result = '1-0')
-                   OR ({player_is_black} AND result = '0-1')
-            ) AS wins,
-            COUNT(*) FILTER (WHERE result IN ('1/2-1/2', '1/2', '½-½')) AS draws,
-            COUNT(*) FILTER (
-                WHERE ({player_is_white} AND result = '0-1')
-                   OR ({player_is_black} AND result = '1-0')
-            ) AS losses,
-            COUNT(*) FILTER (WHERE {player_is_white} AND result = '1-0') AS white_wins,
-            COUNT(*) FILTER (WHERE {white_name} IN ({player_sql}) AND result IN ('1/2-1/2', '1/2', '½-½')) AS white_draws,
-            COUNT(*) FILTER (WHERE {player_is_white} AND result = '0-1') AS white_losses,
-            COUNT(*) FILTER (WHERE {player_is_black} AND result = '0-1') AS black_wins,
-            COUNT(*) FILTER (WHERE {black_name} IN ({player_sql}) AND result IN ('1/2-1/2', '1/2', '½-½')) AS black_draws,
-            COUNT(*) FILTER (WHERE {player_is_black} AND result = '1-0') AS black_losses
-        FROM {source_table}
-        {source_where}
-    """), query_params).first()
-
     draw_result = "result LIKE '1/2%'"
+
     row = db.execute(text(f"""
         {source_prefix}
         SELECT
+            COUNT(*) AS games,
             COUNT(*) FILTER (WHERE {player_is_white}) AS as_white,
             COUNT(*) FILTER (WHERE {player_is_black}) AS as_black,
             COUNT(*) FILTER (
@@ -671,7 +641,7 @@ def player_profile(
     data = row._mapping if row else {}
     return {
         "name": canonical_name,
-        "games": total_games,
+        "games": int(data.get("games") or 0),
         "as_white": int(data.get("as_white") or 0),
         "as_black": int(data.get("as_black") or 0),
         "wins": int(data.get("wins") or 0),
@@ -809,7 +779,7 @@ def games(
             "total": total,
             "page": page,
             "page_size": page_size,
-            "games": [serialize_game(game) for game in rows],
+            "games": [serialize_game(game, include_detected_opening=False) for game in rows],
         }
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -823,7 +793,7 @@ def game_by_id(
     game = db.query(models.ImportedGame).filter(models.ImportedGame.id == game_id).first()
     if not game:
         raise HTTPException(status_code=404, detail="Game not found")
-    return serialize_game(game)
+    return serialize_game(game, include_detected_opening=True)
 
 
 def get_games_order_sql(sort: str):

@@ -99,6 +99,7 @@ class ImportedGame(Base):
 Index("ix_imported_games_white_lower", func.lower(ImportedGame.white))
 Index("ix_imported_games_black_lower", func.lower(ImportedGame.black))
 Index("ix_imported_games_opening_lower", func.lower(ImportedGame.opening))
+Index("ix_imported_games_date_id", ImportedGame.game_date, ImportedGame.id)
 
 
 class Player(Base):
@@ -143,6 +144,14 @@ class ImportedGamePlayerSource(Base):
     source_object_key = Column(String(512), nullable=True, index=True)
     source_game_id = Column(String(50), nullable=True, index=True)
     imported_at = Column(DateTime, server_default=func.now())
+
+
+Index(
+    "ix_imported_game_player_sources_slug_source_game",
+    ImportedGamePlayerSource.player_slug,
+    ImportedGamePlayerSource.source,
+    ImportedGamePlayerSource.game_id,
+)
 
 
 class Collection(Base):

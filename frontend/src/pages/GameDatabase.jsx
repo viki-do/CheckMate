@@ -150,6 +150,11 @@ const GameDatabase = () => {
 
   useEffect(() => {
     let isMounted = true;
+    if (playerSlug || gameId) {
+      setIsLoading(false);
+      return () => { isMounted = false; };
+    }
+
     const loadSummary = async () => {
       setIsLoading(true);
       try {
