@@ -370,13 +370,6 @@ The current backend uses startup-time schema adjustments, environment-variable c
 - OAuth providers require valid provider credentials and matching callback URLs.
 - The frontend README is still the default Vite template; this root README is the authoritative project overview.
 
-## Repository Location
-
-Local path:
-
-```text
-C:\Users\Viktoria\Desktop\checkmate_render
-```
 
 ## Project Summary
 
