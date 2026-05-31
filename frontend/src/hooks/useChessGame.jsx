@@ -536,14 +536,22 @@ const initializeGame = useCallback(async () => {
 
                     setHistory(prev => {
                         if (prev.some(m => m.fen === res.data.new_fen)) return prev;
+                        const preBotEval = botMove.evaluation ?? res.data.evaluation;
+                        const historyWithPlayerEval = preBotEval === undefined || preBotEval === null || prev.length === 0
+                            ? prev
+                            : prev.map((move, index) => (
+                                index === prev.length - 1 && move.eval === undefined
+                                    ? { ...move, eval: preBotEval }
+                                    : move
+                            ));
 
                         return [
-                            ...prev,
+                            ...historyWithPlayerEval,
                             createBotMoveEntry({
-                                botMove,
+                                botMove: { ...botMove, evaluation: undefined },
                                 fen: res.data.new_fen,
                                 thinkTime: botMove.think_time || 0,
-                                moveNumber: prev.length,
+                                moveNumber: historyWithPlayerEval.length,
                                 whiteTime,
                                 blackTime
                             })
@@ -784,16 +792,24 @@ useEffect(() => {
         setHistory(prev => {
             // Ellenőrizzük, hogy ez a FEN véletlenül nincs-e már benne
             if (prev.some(m => m.fen === data.fen)) return prev;
+            const preBotEval = botMove.evaluation ?? data.evaluation;
+            const historyWithPlayerEval = preBotEval === undefined || preBotEval === null || prev.length === 0
+                ? prev
+                : prev.map((move, index) => (
+                    index === prev.length - 1 && move.eval === undefined
+                        ? { ...move, eval: preBotEval }
+                        : move
+                ));
 
             const botMoveEntry = createBotMoveEntry({
-                botMove,
+                botMove: { ...botMove, evaluation: undefined },
                 fen: data.fen,
                 thinkTime: serverThinkTime, // A szerver által generált random idő (1-4s)
-                moveNumber: prev.length,   // Sorszám a lista hossza alapján
+                moveNumber: historyWithPlayerEval.length,   // Sorszám a lista hossza alapján
                 whiteTime,
                 blackTime
             });
-            return [...prev, botMoveEntry];
+            return [...historyWithPlayerEval, botMoveEntry];
         });
 
         setFen(data.fen);

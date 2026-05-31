@@ -85,6 +85,18 @@ const getMoveEvalForBar = (move, fallback = 0) => {
     return normalizeEvalForBar(moveEval ?? lineEval, fallback);
 };
 
+const findPreviousBarEval = (history = [], fromIndex = history.length, evalByFen = {}) => {
+    for (let i = Math.min(fromIndex - 1, history.length - 1); i >= 0; i -= 1) {
+        const move = history[i];
+        const moveEval = getMoveEvalForBar(move, undefined);
+        if (moveEval !== undefined && moveEval !== null) return moveEval;
+
+        const fenEval = evalByFen[move?.fen];
+        if (fenEval !== undefined && fenEval !== null) return normalizeEvalForBar(fenEval, undefined);
+    }
+    return undefined;
+};
+
 const extractPublicIdFromSlug = (slug) => String(slug || '').split('-').pop();
 
 const getCollectionGames = (collection) => (
@@ -883,7 +895,7 @@ const AnalyzeBoard = () => {
         let isMounted = true;
         const loadPositionEval = async () => {
             try {
-                const previousEval = findPreviousKnownEval(sandboxHistory, targetIndex);
+                const previousEval = findPreviousBarEval(sandboxHistory, targetIndex, positionEvalByFen);
                 const res = await axios.post(`${API_BASE}/analyze-sandbox-move`, {
                     fen_before: targetFen,
                     move: null,
@@ -1827,7 +1839,7 @@ const handleExternalDrop = (e, row, col) => {
     const materialDiff = getMaterialDiff(captured);
 
     const activeHistoryIndex = viewIndex === -1 ? sandboxHistory.length - 1 : Number.parseInt(viewIndex, 10);
-    const previousKnownEval = findPreviousKnownEval(sandboxHistory, activeHistoryIndex);
+    const previousKnownEval = findPreviousBarEval(sandboxHistory, activeHistoryIndex, positionEvalByFen);
     const currentPositionEval = positionEvalByFen[currentFen];
     const evalFallback = normalizeEvalForBar(previousKnownEval, initialAnalysis?.eval ?? 0);
     const currentEvalValue = viewIndex === -1

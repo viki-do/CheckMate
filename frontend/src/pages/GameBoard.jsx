@@ -49,6 +49,17 @@ const findPreviousKnownEval = (history = [], fromIndex = history.length) => {
     return undefined;
 };
 
+const findPreviousBarEval = (history = [], fromIndex = history.length, evalByFen = {}) => {
+    for (let i = Math.min(fromIndex - 1, history.length - 1); i >= 0; i -= 1) {
+        const move = history[i];
+        const value = move?.eval ?? evalByFen[move?.fen];
+        if (value !== undefined && value !== null) {
+            return normalizeEvalForBar(value, undefined);
+        }
+    }
+    return undefined;
+};
+
 const getScreenLayoutMode = () => {
     if (typeof window === 'undefined') return '';
     const screenWidth = Math.max(window.screen?.width || 0, window.screen?.availWidth || 0);
@@ -115,7 +126,7 @@ const GameBoard = () => {
     const displayedHistoryIndex = viewIndex === -1 ? history.length - 1 : Number.parseInt(viewIndex, 10);
     const displayedHistoryMove = Number.isInteger(displayedHistoryIndex) ? history[displayedHistoryIndex] : null;
     const isDisplayedStartMove = displayedHistoryMove?.m === 'start';
-    const previousKnownEval = findPreviousKnownEval(history, displayedHistoryIndex);
+    const previousKnownEval = findPreviousBarEval(history, displayedHistoryIndex, positionEvalByFen);
     const currentEvalValue = normalizeEvalForBar(
         displayedHistoryMove?.eval ?? positionEvalByFen[displayFen],
         normalizeEvalForBar(previousKnownEval, 0)
@@ -194,7 +205,7 @@ const GameBoard = () => {
         const targetHistoryIndex = displayedHistoryIndex;
         const loadPositionEval = async () => {
             try {
-                const previousEval = findPreviousKnownEval(history, targetHistoryIndex);
+                const previousEval = findPreviousBarEval(history, targetHistoryIndex, positionEvalByFen);
                 const res = await axios.post(`${API_BASE}/analyze-sandbox-move`, {
                     fen_before: targetFen,
                     move: null,
