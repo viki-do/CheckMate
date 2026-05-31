@@ -2,12 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import axios from 'axios';
 import { User, Lock } from 'lucide-react';
-import { useNavigate, Link } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { API_BASE } from '../config/api';
 
 const LoginPage = () => {
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
-  const navigate = useNavigate();
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -29,13 +29,14 @@ const LoginPage = () => {
       localStorage.setItem('chessUserId', userId);
       if (mode) localStorage.setItem('chessMode', mode);
       window.history.replaceState({}, document.title, "/login");
-      navigate('/home');
-      window.location.reload(); 
+      window.location.replace('/home');
     }
-  }, [navigate]);
+  }, []);
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
+    setIsSubmitting(true);
     try {
       const res = await axios.post(`${API_BASE}/login`, loginForm);
       localStorage.setItem('chessToken', res.data.access_token);
@@ -43,11 +44,15 @@ const LoginPage = () => {
       localStorage.setItem('chessUserId', res.data.user_id);
       localStorage.setItem('chessMode', res.data.mode || 'user');
       if (res.data.demo_expires_at) localStorage.setItem('chessDemoExpiresAt', res.data.demo_expires_at);
-      navigate('/home');
-      window.location.reload(); 
+      window.location.replace('/home');
     } catch (err) { 
+      if (axios.isCancel?.(err) || err?.code === 'ERR_CANCELED' || err?.message === 'Request aborted') {
+        setIsSubmitting(false);
+        return;
+      }
       console.error(err); 
       alert("Invalid login credentials.");
+      setIsSubmitting(false);
     }
   };
 
@@ -103,9 +108,10 @@ const LoginPage = () => {
           </div>
           <button 
             type="submit" 
-            className="w-full mt-2 py-3.5 bg-[#81b64c] text-white text-lg font-bold rounded hover:bg-[#a3d16a] transition-colors"
+            disabled={isSubmitting}
+            className="w-full mt-2 py-3.5 bg-[#81b64c] text-white text-lg font-bold rounded hover:bg-[#a3d16a] transition-colors disabled:opacity-70 disabled:cursor-wait"
           >
-            Log In
+            {isSubmitting ? 'Signing in...' : 'Log In'}
           </button>
         </form>
 

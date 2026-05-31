@@ -418,7 +418,7 @@ const initializeGame = useCallback(async () => {
                 premovesRef.current = nextQueue;
                 setPremoves(nextQueue);
 
-                const result = await executeMove(nextMove.from, nextMove.to, promotion, latestFen);
+                const result = await executeMove(nextMove.from, nextMove.to, promotion, latestFen, { clearPremoves: false });
                 if (result?.nextFen && !result.isGameOver && premovesRef.current.length) {
                     isExecutingPremoveRef.current = false;
                     processNextPremove(result.nextFen);
@@ -431,6 +431,7 @@ const initializeGame = useCallback(async () => {
 
     const executeMove = async (from, to, promotion = null, fenOverride = null, options = {}) => {
         const shouldOptimisticallyCommit = options.optimistic !== false;
+        const shouldClearPremovesOnMove = options.clearPremoves !== false;
         const activeGameId = gameIdRef.current || gameId;
         if (!activeGameId || activeGameId === "null") {
             premovesRef.current = [];
@@ -489,6 +490,10 @@ const initializeGame = useCallback(async () => {
             setSelectedSquare(null);
             setValidMoves([]);
             setIsDragging(false);
+            if (shouldClearPremovesOnMove) {
+                premovesRef.current = [];
+                setPremoves([]);
+            }
             lastPlayedMoveNum.current += 1;
             playSound(getMoveAttemptSoundName(chess, moveAttempt));
         };
@@ -567,6 +572,16 @@ const initializeGame = useCallback(async () => {
                     setTimeout(() => {
                         playBotMoveSound(botMove.san);
                     }, 110);
+
+                    const triggerQueuedPremoves = () => {
+                        if (nextTurnColor !== getMyColor() || !premovesRef.current.length) return;
+                        if (moveRequestInFlightRef.current) {
+                            setTimeout(triggerQueuedPremoves, 120);
+                            return;
+                        }
+                        processNextPremove(res.data.new_fen);
+                    };
+                    setTimeout(triggerQueuedPremoves, MOVE_COMMIT_DELAY_MS);
                 }
 
                 return { nextFen: res.data.new_fen, isGameOver: res.data.is_game_over };
@@ -827,6 +842,16 @@ useEffect(() => {
         setTimeout(() => {
             playBotMoveSound(botMove.san);
         }, 110);
+
+        const triggerQueuedPremoves = () => {
+            if (nextTurnColor !== getMyColor() || !premovesRef.current.length) return;
+            if (moveRequestInFlightRef.current) {
+                setTimeout(triggerQueuedPremoves, 120);
+                return;
+            }
+            processNextPremove(data.fen);
+        };
+        setTimeout(triggerQueuedPremoves, MOVE_COMMIT_DELAY_MS);
     };
 
     const handleGameOver = (data) => {
@@ -858,7 +883,7 @@ useEffect(() => {
         socket.off("game_over", handleGameOver);
     };
 
-}, [gameId, playBotMoveSound, processNextPremove]); // Az időzítőket (whiteTime, blackTime) szándékosan kihagyjuk!
+}, [gameId, getMyColor, playBotMoveSound, processNextPremove]); // Az időzítőket (whiteTime, blackTime) szándékosan kihagyjuk!
     // Óra effektus (Ref-ek nélkül, az eredeti logikád szerint)
     useEffect(() => {
         let timer;
