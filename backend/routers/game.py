@@ -25,12 +25,17 @@ engine_mode = None
 
 def resolve_stockfish_path():
     env_path = os.getenv("STOCKFISH_PATH")
-    if env_path:
+    if env_path and Path(env_path).exists():
         return env_path
+    if env_path:
+        print(f"Configured STOCKFISH_PATH does not exist, falling back to PATH lookup: {env_path}")
     system_path = which("stockfish")
     if system_path:
         return system_path
-    return str(Path(__file__).resolve().parents[1] / "engine" / "stockfish.exe")
+    local_path = Path(__file__).resolve().parents[1] / "engine" / "stockfish.exe"
+    if local_path.exists():
+        return str(local_path)
+    return str(local_path)
 
 STOCKFISH_PATH = resolve_stockfish_path()
 OPENING_BOOK = {}
@@ -188,8 +193,14 @@ def analyze_full_game(game_id: str, user_id: str = Depends(get_current_user_id),
     if not game or not moves:
         raise HTTPException(status_code=404, detail="Game or moves not found")
 
-    engine = get_engine()
-    configure_engine_for_analysis(engine)
+    try:
+        engine = get_engine()
+        configure_engine_for_analysis(engine)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Stockfish is unavailable for full game review. STOCKFISH_PATH={STOCKFISH_PATH}. Error: {exc}",
+        )
     board = chess.Board()
     coach = ChessCoachEngine()
     full_analysis = []

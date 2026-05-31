@@ -1345,8 +1345,10 @@ const handleFullReview = async ({ stayOnIntro = false } = {}) => {
     } catch (err) {
         setIsSandboxReviewLocked(false);
         console.error("!!! FULL REVIEW ERROR !!!");
+        let message = err.message || 'Game review failed.';
         if (err.response) {
             console.error("Status:", err.response.status);
+            message = err.response.data?.detail || err.response.data?.message || `Server error (${err.response.status})`;
             console.error("Szerver hibaüzenet:", err.response.data);
             if (err.response.status === 404) {
                 console.error("404-es hiba: Még nem adtad hozzá az új végpontot a Python kódhoz!");
@@ -1354,6 +1356,7 @@ const handleFullReview = async ({ stayOnIntro = false } = {}) => {
         } else {
             console.error("Hiba oka:", err.message);
         }
+        setPanelNotice(String(message));
     } finally {
         setIsAnalyzing(false);
     }
