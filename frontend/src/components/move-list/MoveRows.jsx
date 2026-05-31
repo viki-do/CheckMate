@@ -4,23 +4,23 @@ import { formatBarScaleEval, getDisplayEvalForMove, getTerminalEvalForFen } from
 
 const DEFAULT_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
-const formatMoveEval = (move, positionEvalByFen) => {
+const formatMoveEval = (move, positionEvalByFen, evalPerspective) => {
     if (!move) return null;
     const terminal = getTerminalEvalForFen(move.fen, DEFAULT_FEN);
     if (terminal?.result) return terminal.result;
 
     const value = getDisplayEvalForMove(move, positionEvalByFen);
     if (value === undefined || value === null) return null;
-    return formatBarScaleEval(value);
+    return formatBarScaleEval(value, null, evalPerspective);
 };
 
-const MoveRows = ({ rows, history, viewIndex, goToMove, positionEvalByFen = {} }) => (
+const MoveRows = ({ rows, history, viewIndex, goToMove, positionEvalByFen = {}, evalPerspective = 'white' }) => (
     <div className="flex flex-col">
         {rows.map((row, i) => {
             const whiteIdx = getHistoryIndex(history, row.white);
             const blackIdx = getHistoryIndex(history, row.black);
-            const whiteEval = formatMoveEval(row.white, positionEvalByFen);
-            const blackEval = formatMoveEval(row.black, positionEvalByFen);
+            const whiteEval = formatMoveEval(row.white, positionEvalByFen, evalPerspective);
+            const blackEval = formatMoveEval(row.black, positionEvalByFen, evalPerspective);
             return (
                 <div key={i} className={`flex h-10 items-center ${i % 2 === 0 ? 'bg-[#2b2926]' : 'bg-transparent'}`}>
                     <div className="w-10 text-center text-[#666] text-[13px] font-semibold shrink-0">{row.moveNumber}.</div>

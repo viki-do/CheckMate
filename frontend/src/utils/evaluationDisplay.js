@@ -58,10 +58,12 @@ export const getDisplayEvalForMove = (move, evalByFen = {}) => (
     evalByFen[move?.fen] ?? getFirstEngineLineEval(move) ?? (hasReliableMoveEval(move) ? move.eval : undefined)
 );
 
-export const formatBarScaleEval = (value, terminalResult = null) => {
+export const formatBarScaleEval = (value, terminalResult = null, perspective = 'white') => {
     if (terminalResult) return terminalResult;
 
-    const whiteHeight = getWhiteBarHeightFromEval(value);
+    const normalized = normalizeEvalForBar(value, 0);
+    const perspectiveEval = perspective === 'black' ? -normalized : normalized;
+    const whiteHeight = getWhiteBarHeightFromEval(perspectiveEval);
     const whiteShare = Math.round(whiteHeight);
     const blackShare = 100 - whiteShare;
 

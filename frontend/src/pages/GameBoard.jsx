@@ -41,12 +41,24 @@ const getLatestHistoryFen = (history = [], fallbackFen = DEFAULT_FEN) => (
 const findPreviousBarEval = (history = [], fromIndex = history.length, evalByFen = {}) => {
     for (let i = Math.min(fromIndex - 1, history.length - 1); i >= 0; i -= 1) {
         const move = history[i];
-        const value = hasReliableMoveEval(move) ? move.eval : evalByFen[move?.fen];
+        const value = evalByFen[move?.fen] ?? (hasReliableMoveEval(move) ? move.eval : undefined);
         if (value !== undefined && value !== null) {
             return normalizeEvalForBar(value, undefined);
         }
     }
     return undefined;
+};
+
+const findPendingPositionEvalMove = (history = [], evalByFen = {}, failedEvalByFen = {}) => {
+    for (let i = history.length - 1; i >= 0; i -= 1) {
+        const move = history[i];
+        if (!move?.fen || move.m === 'start') continue;
+        if (move.fen === DEFAULT_FEN) continue;
+        if (evalByFen[move.fen] !== undefined || failedEvalByFen[move.fen]) continue;
+        if (getTerminalEvalForFen(move.fen, DEFAULT_FEN) !== undefined) continue;
+        return { move, index: i };
+    }
+    return null;
 };
 
 const getScreenLayoutMode = () => {
@@ -80,6 +92,7 @@ const GameBoard = () => {
     const [userName, setUserName] = useState("You");
     const [userAvatarUrl, setUserAvatarUrl] = useState("");
     const [positionEvalByFen, setPositionEvalByFen] = useState({});
+    const [failedPositionEvalByFen, setFailedPositionEvalByFen] = useState({});
     const [screenLayoutMode, setScreenLayoutMode] = useState(() => getScreenLayoutMode());
 
 
@@ -128,6 +141,7 @@ const GameBoard = () => {
             ? 0
             : getWhiteBarHeightFromEval(currentEvalValue);
     const shouldShowEvalBar = (location.pathname === '/play/bots' && !shouldShowDefaultBoard) || isBotGameRoute || Boolean(archiveGameId);
+    const playerPerspective = isFlipped ? 'black' : 'white';
     const displayIsFlipped = shouldShowDefaultBoard ? defaultBoardIsFlipped : isFlipped;
     const captured = getCapturedPieces(displayFen);
     const materialDiff = getMaterialDiff(captured);
@@ -190,14 +204,28 @@ const GameBoard = () => {
     }, [initializeGame, archiveGameId]);
 
     useEffect(() => {
-        if (!shouldShowEvalBar || !API_BASE || !token || !displayFen || displayFen === DEFAULT_FEN) return;
+        if (!shouldShowEvalBar || !API_BASE || !token) return;
         if (isDisplayedStartMove) return;
-        if (getTerminalEvalForFen(displayFen, DEFAULT_FEN) !== undefined) return;
-        if (positionEvalByFen[displayFen] !== undefined) return;
+
+        const displayedNeedsEval = (
+            displayFen &&
+            displayFen !== DEFAULT_FEN &&
+            getTerminalEvalForFen(displayFen, DEFAULT_FEN) === undefined &&
+            positionEvalByFen[displayFen] === undefined &&
+            !failedPositionEvalByFen[displayFen]
+        );
+        const target = displayedNeedsEval
+            ? { fen: displayFen, index: displayedHistoryIndex }
+            : (() => {
+                const pending = findPendingPositionEvalMove(history, positionEvalByFen, failedPositionEvalByFen);
+                return pending ? { fen: pending.move.fen, index: pending.index } : null;
+            })();
+
+        if (!target?.fen) return;
 
         let isMounted = true;
-        const targetFen = displayFen;
-        const targetHistoryIndex = displayedHistoryIndex;
+        const targetFen = target.fen;
+        const targetHistoryIndex = target.index;
         const loadPositionEval = async () => {
             try {
                 const previousEval = findPreviousBarEval(history, targetHistoryIndex, positionEvalByFen);
@@ -213,7 +241,10 @@ const GameBoard = () => {
                     res.data?.error ||
                     (!engineLines.length && !res.data?.best_move && Number(res.data?.eval) === 0)
                 );
-                if (analysisFailed) return;
+                if (analysisFailed) {
+                    setFailedPositionEvalByFen((current) => ({ ...current, [targetFen]: true }));
+                    return;
+                }
 
                 const lineEval = getFirstEngineLineEval(res.data);
                 const rawEval = Number(res.data?.eval);
@@ -233,12 +264,15 @@ const GameBoard = () => {
                 }
             } catch (err) {
                 console.error("Position eval failed:", err);
+                if (isMounted) {
+                    setFailedPositionEvalByFen((current) => ({ ...current, [targetFen]: true }));
+                }
             }
         };
 
         loadPositionEval();
         return () => { isMounted = false; };
-    }, [shouldShowEvalBar, API_BASE, token, displayFen, displayedHistoryIndex, displayedHistoryMove?.eval, isDisplayedStartMove, history, positionEvalByFen, setHistory]);
+    }, [shouldShowEvalBar, API_BASE, token, displayFen, displayedHistoryIndex, displayedMoveEval, isDisplayedStartMove, history, positionEvalByFen, failedPositionEvalByFen, setHistory]);
 
     useEffect(() => {
         if (!archiveGameId || gameLogic.isLoading) return;
@@ -733,6 +767,7 @@ const GameBoard = () => {
                     currentEvalValue={currentEvalValue}
                     terminalResult={terminalEval?.result}
                     terminalWinner={terminalEval?.winner}
+                    perspective={playerPerspective}
                 />
             )}
 
@@ -810,6 +845,7 @@ const GameBoard = () => {
                 onDeleteGame: handleDeleteGame,
                 isArchiveGame: Boolean(archiveGameId),
                 positionEvalByFen,
+                evalPerspective: playerPerspective,
             }} />
             </div>
 

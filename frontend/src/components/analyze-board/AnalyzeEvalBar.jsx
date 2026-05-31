@@ -6,7 +6,7 @@ const getTerminalClassName = (winner) => {
     return 'bg-[#8b8986]';
 };
 
-const AnalyzeEvalBar = ({ whiteBarHeight, currentEvalValue, terminalResult = null, terminalWinner = null }) => {
+const AnalyzeEvalBar = ({ whiteBarHeight, currentEvalValue, terminalResult = null, terminalWinner = null, perspective = 'white' }) => {
     const isTerminal = Boolean(terminalResult);
     const labelIsDark = terminalWinner === 'white' || (!isTerminal && whiteBarHeight >= 50);
     const labelPosition = terminalWinner === 'black' || (!isTerminal && whiteBarHeight < 50) ? 'top-2' : 'bottom-2';
@@ -16,7 +16,7 @@ const AnalyzeEvalBar = ({ whiteBarHeight, currentEvalValue, terminalResult = nul
         {!isTerminal && <div className="bg-white w-full transition-all duration-700 ease-out" style={{ height: `${whiteBarHeight}%` }} />}
             <span className={`absolute ${labelPosition} left-0 w-full text-center text-[10px] font-bold uppercase`}>
                 <span className={labelIsDark ? 'text-black' : 'text-white'}>
-                    {formatBarScaleEval(currentEvalValue, terminalResult)}
+                    {formatBarScaleEval(currentEvalValue, terminalResult, perspective)}
                 </span>
             </span>
     </div>

@@ -33,7 +33,8 @@ const MoveListPanel = ({
     onAddToCollection,
     onDeleteGame,
     isArchiveGame = false,
-    positionEvalByFen = {}
+    positionEvalByFen = {},
+    evalPerspective = 'white'
 }) => {
     const isOngoing = status === "ongoing";
     const isGameOver = ["resigned", "checkmate", "draw", "stalemate", "aborted", "finished"].includes(status);
@@ -70,6 +71,7 @@ const MoveListPanel = ({
                     viewIndex={viewIndex}
                     goToMove={goToMove}
                     positionEvalByFen={positionEvalByFen}
+                    evalPerspective={evalPerspective}
                 />
                 <EndGameSummary finalResult={finalResult} showEndGameUI={showEndGameUI} />
             </div>

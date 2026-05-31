@@ -542,10 +542,11 @@ const initializeGame = useCallback(async () => {
                     setHistory(prev => {
                         if (prev.some(m => m.fen === res.data.new_fen)) return prev;
                         const preBotEval = botMove.evaluation ?? res.data.evaluation;
+                        const hasUsablePreBotEval = preBotEval !== undefined && preBotEval !== null && preBotEval !== 0 && preBotEval !== 0.0;
                         const historyWithPlayerEval = preBotEval === undefined || preBotEval === null || prev.length === 0
                             ? prev
                             : prev.map((move, index) => (
-                                index === prev.length - 1 && move.eval === undefined
+                                hasUsablePreBotEval && index === prev.length - 1 && move.eval === undefined
                                     ? { ...move, eval: preBotEval }
                                     : move
                             ));
@@ -808,10 +809,11 @@ useEffect(() => {
             // Ellenőrizzük, hogy ez a FEN véletlenül nincs-e már benne
             if (prev.some(m => m.fen === data.fen)) return prev;
             const preBotEval = botMove.evaluation ?? data.evaluation;
+            const hasUsablePreBotEval = preBotEval !== undefined && preBotEval !== null && preBotEval !== 0 && preBotEval !== 0.0;
             const historyWithPlayerEval = preBotEval === undefined || preBotEval === null || prev.length === 0
                 ? prev
                 : prev.map((move, index) => (
-                    index === prev.length - 1 && move.eval === undefined
+                    hasUsablePreBotEval && index === prev.length - 1 && move.eval === undefined
                         ? { ...move, eval: preBotEval }
                         : move
                 ));
