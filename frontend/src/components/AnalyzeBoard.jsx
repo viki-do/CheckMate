@@ -65,6 +65,26 @@ const findPreviousKnownEval = (history = [], fromIndex = history.length) => {
     return undefined;
 };
 
+const getFirstEngineLineEval = (move) => {
+    const lines = move?.engineLines || move?.engine_lines || [];
+    const firstLine = Array.isArray(lines) ? lines[0] : null;
+    return firstLine?.eval ?? firstLine?.raw_eval ?? firstLine?.rawEval;
+};
+
+const getMoveEvalForBar = (move, fallback = 0) => {
+    if (!move) return normalizeEvalForBar(undefined, fallback);
+
+    const lineEval = getFirstEngineLineEval(move);
+    const moveEval = move.eval;
+    const isBookMove = move.analysisLabel === 'book' || move.is_book || move.isBook;
+
+    if (lineEval !== undefined && lineEval !== null && (isBookMove || moveEval === 0 || moveEval === undefined || moveEval === null)) {
+        return normalizeEvalForBar(lineEval, fallback);
+    }
+
+    return normalizeEvalForBar(moveEval ?? lineEval, fallback);
+};
+
 const extractPublicIdFromSlug = (slug) => String(slug || '').split('-').pop();
 
 const getCollectionGames = (collection) => (
@@ -1809,13 +1829,14 @@ const handleExternalDrop = (e, row, col) => {
     const activeHistoryIndex = viewIndex === -1 ? sandboxHistory.length - 1 : Number.parseInt(viewIndex, 10);
     const previousKnownEval = findPreviousKnownEval(sandboxHistory, activeHistoryIndex);
     const currentPositionEval = positionEvalByFen[currentFen];
+    const evalFallback = normalizeEvalForBar(previousKnownEval, initialAnalysis?.eval ?? 0);
     const currentEvalValue = viewIndex === -1
         ? (sandboxHistory.length > 0
-            ? normalizeEvalForBar(sandboxHistory[sandboxHistory.length - 1].eval ?? currentPositionEval, normalizeEvalForBar(previousKnownEval, initialAnalysis?.eval ?? 0))
-            : normalizeEvalForBar(currentPositionEval ?? initialAnalysis?.eval, 0))
-        : normalizeEvalForBar(
-            sandboxHistory[activeHistoryIndex]?.eval ?? currentPositionEval,
-            normalizeEvalForBar(previousKnownEval, initialAnalysis?.eval ?? 0)
+            ? getMoveEvalForBar(sandboxHistory[sandboxHistory.length - 1], normalizeEvalForBar(currentPositionEval, evalFallback))
+            : normalizeEvalForBar(currentPositionEval ?? getFirstEngineLineEval(initialAnalysis) ?? initialAnalysis?.eval, 0))
+        : getMoveEvalForBar(
+            sandboxHistory[activeHistoryIndex],
+            normalizeEvalForBar(currentPositionEval, evalFallback)
         );
     const whiteBarHeight = Math.min(Math.max(50 + (currentEvalValue * 10), 5), 95);
     const hasActiveSandboxState =
