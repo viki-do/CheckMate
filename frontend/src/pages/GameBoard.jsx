@@ -39,6 +39,12 @@ const normalizeEvalForBar = (value, fallback = 0) => {
     return Number.isFinite(numeric) ? numeric : fallback;
 };
 
+const getFirstEngineLineEval = (source) => {
+    const lines = source?.engineLines || source?.engine_lines || [];
+    const firstLine = Array.isArray(lines) ? lines[0] : null;
+    return firstLine?.eval ?? firstLine?.raw_eval ?? firstLine?.rawEval;
+};
+
 const findPreviousKnownEval = (history = [], fromIndex = history.length) => {
     for (let i = Math.min(fromIndex - 1, history.length - 1); i >= 0; i -= 1) {
         const value = history[i]?.eval;
@@ -139,9 +145,9 @@ const GameBoard = () => {
     const displayedHistoryMove = Number.isInteger(displayedHistoryIndex) ? history[displayedHistoryIndex] : null;
     const isDisplayedStartMove = displayedHistoryMove?.m === 'start';
     const previousKnownEval = findPreviousBarEval(history, displayedHistoryIndex, positionEvalByFen);
-    const displayedMoveEval = hasReliableMoveEval(displayedHistoryMove) ? displayedHistoryMove.eval : undefined;
+    const displayedMoveEval = positionEvalByFen[displayFen] ?? getFirstEngineLineEval(displayedHistoryMove) ?? (hasReliableMoveEval(displayedHistoryMove) ? displayedHistoryMove.eval : undefined);
     const currentEvalValue = normalizeEvalForBar(
-        positionEvalByFen[displayFen] ?? displayedMoveEval,
+        displayedMoveEval,
         normalizeEvalForBar(previousKnownEval, 0)
     );
     const whiteBarHeight = Math.min(Math.max(50 + (currentEvalValue * 10), 5), 95);
@@ -210,7 +216,6 @@ const GameBoard = () => {
     useEffect(() => {
         if (!shouldShowEvalBar || !API_BASE || !token || !displayFen || displayFen === DEFAULT_FEN) return;
         if (isDisplayedStartMove) return;
-        if (hasReliableMoveEval(displayedHistoryMove)) return;
         if (positionEvalByFen[displayFen] !== undefined) return;
 
         let isMounted = true;
@@ -226,16 +231,19 @@ const GameBoard = () => {
                 }, { headers: { Authorization: `Bearer ${token}` } });
                 if (!isMounted) return;
 
+                const lineEval = getFirstEngineLineEval(res.data);
                 const rawEval = Number(res.data?.eval);
-                const nextEval = Number.isFinite(rawEval)
-                    ? rawEval / 100
-                    : normalizeEvalForBar(res.data?.eval, 0);
+                const nextEval = lineEval !== undefined && lineEval !== null
+                    ? normalizeEvalForBar(lineEval, normalizeEvalForBar(previousEval, 0))
+                    : (Number.isFinite(rawEval)
+                        ? rawEval / 100
+                        : normalizeEvalForBar(res.data?.eval, normalizeEvalForBar(previousEval, 0)));
                 setPositionEvalByFen((current) => ({ ...current, [targetFen]: nextEval }));
 
                 if (Number.isInteger(targetHistoryIndex)) {
                     setHistory((current) => current.map((move, index) => (
                         index === targetHistoryIndex && move?.fen === targetFen
-                            ? { ...move, eval: nextEval, rawEval: Number.isFinite(rawEval) ? rawEval : move.rawEval }
+                            ? { ...move, eval: nextEval, rawEval: Number.isFinite(rawEval) ? rawEval : move.rawEval, engineLines: res.data?.engine_lines || move.engineLines }
                             : move
                     )));
                 }

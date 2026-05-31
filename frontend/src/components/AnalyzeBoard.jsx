@@ -903,17 +903,20 @@ const AnalyzeBoard = () => {
                 }, { headers: { Authorization: `Bearer ${token}` } });
                 if (!isMounted || res.data?.error) return;
 
+                const lineEval = getFirstEngineLineEval(res.data);
                 const rawEval = Number(res.data?.eval);
-                const nextEval = Number.isFinite(rawEval)
-                    ? rawEval / 100
-                    : normalizeEvalForBar(res.data?.eval, initialAnalysis?.eval ?? 0);
+                const nextEval = lineEval !== undefined && lineEval !== null
+                    ? normalizeEvalForBar(lineEval, normalizeEvalForBar(previousEval, initialAnalysis?.eval ?? 0))
+                    : (Number.isFinite(rawEval)
+                        ? rawEval / 100
+                        : normalizeEvalForBar(res.data?.eval, initialAnalysis?.eval ?? 0));
 
                 setPositionEvalByFen((current) => ({ ...current, [targetFen]: nextEval }));
 
                 if (targetMove?.fen === targetFen && Number.isInteger(targetIndex)) {
                     setSandboxHistory((current) => current.map((move, index) => (
                         index === targetIndex && move?.fen === targetFen
-                            ? { ...move, eval: nextEval, rawEval: Number.isFinite(rawEval) ? rawEval : move.rawEval }
+                            ? { ...move, eval: nextEval, rawEval: Number.isFinite(rawEval) ? rawEval : move.rawEval, engineLines: res.data?.engine_lines || move.engineLines }
                             : move
                     )));
                 }
