@@ -49,10 +49,22 @@ const findPreviousKnownEval = (history = [], fromIndex = history.length) => {
     return undefined;
 };
 
+const hasReliableMoveEval = (move) => {
+    if (move?.eval === undefined || move?.eval === null) return false;
+    if (move.eval !== 0) return true;
+    return (
+        move.rawEval !== undefined ||
+        move.raw_eval !== undefined ||
+        Boolean(move.engineLines?.length) ||
+        Boolean(move.engine_lines?.length) ||
+        Boolean(move.analysisLabel)
+    );
+};
+
 const findPreviousBarEval = (history = [], fromIndex = history.length, evalByFen = {}) => {
     for (let i = Math.min(fromIndex - 1, history.length - 1); i >= 0; i -= 1) {
         const move = history[i];
-        const value = move?.eval ?? evalByFen[move?.fen];
+        const value = hasReliableMoveEval(move) ? move.eval : evalByFen[move?.fen];
         if (value !== undefined && value !== null) {
             return normalizeEvalForBar(value, undefined);
         }
@@ -127,8 +139,9 @@ const GameBoard = () => {
     const displayedHistoryMove = Number.isInteger(displayedHistoryIndex) ? history[displayedHistoryIndex] : null;
     const isDisplayedStartMove = displayedHistoryMove?.m === 'start';
     const previousKnownEval = findPreviousBarEval(history, displayedHistoryIndex, positionEvalByFen);
+    const displayedMoveEval = hasReliableMoveEval(displayedHistoryMove) ? displayedHistoryMove.eval : undefined;
     const currentEvalValue = normalizeEvalForBar(
-        displayedHistoryMove?.eval ?? positionEvalByFen[displayFen],
+        positionEvalByFen[displayFen] ?? displayedMoveEval,
         normalizeEvalForBar(previousKnownEval, 0)
     );
     const whiteBarHeight = Math.min(Math.max(50 + (currentEvalValue * 10), 5), 95);
@@ -197,7 +210,7 @@ const GameBoard = () => {
     useEffect(() => {
         if (!shouldShowEvalBar || !API_BASE || !token || !displayFen || displayFen === DEFAULT_FEN) return;
         if (isDisplayedStartMove) return;
-        if (displayedHistoryMove?.eval !== undefined && displayedHistoryMove?.eval !== null) return;
+        if (hasReliableMoveEval(displayedHistoryMove)) return;
         if (positionEvalByFen[displayFen] !== undefined) return;
 
         let isMounted = true;
