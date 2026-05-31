@@ -182,81 +182,45 @@
 
 @media (min-width: 1280px) {
   .app-board-size {
-    width: min(800px, calc(100dvh - 160px));
-    height: min(800px, calc(100dvh - 160px));
+    width: min(960px, calc(100dvh - 140px), calc(100vw - 760px));
+    height: min(960px, calc(100dvh - 140px), calc(100vw - 760px));
   }
 
   .app-board-width {
-    width: min(800px, calc(100dvh - 160px));
+    width: min(960px, calc(100dvh - 140px), calc(100vw - 760px));
   }
 
   .app-board-height {
-    height: min(800px, calc(100dvh - 160px));
+    height: min(960px, calc(100dvh - 140px), calc(100vw - 760px));
   }
 
   .app-panel-size {
+    width: clamp(540px, 30vw, 660px);
+    min-width: clamp(540px, 30vw, 660px);
+    height: min(960px, calc(100dvh - 24px));
+  }
+}
+
+.analysis-shell.layout-2160x1440 .app-board-size {
+    width: min(800px, calc(100dvh - 160px));
+    height: min(800px, calc(100dvh - 160px));
+}
+
+.analysis-shell.layout-2160x1440 .app-board-width {
+    width: min(800px, calc(100dvh - 160px));
+}
+
+.analysis-shell.layout-2160x1440 .app-board-height {
+    height: min(800px, calc(100dvh - 160px));
+}
+
+.analysis-shell.layout-2160x1440 .app-panel-size {
     width: 540px;
     min-width: 540px;
     height: min(880px, calc(100dvh - 24px));
-  }
-}
-
-@media (min-width: 1280px) {
-  .analysis-shell {
-    height: 100vh !important;
-    min-height: auto !important;
-    flex-direction: row !important;
-    justify-content: flex-start !important;
-    align-items: center !important;
-    padding: 16px 24px !important;
-    gap: 24px !important;
-    overflow: hidden !important;
-  }
-
-  .analysis-shell .app-board-size {
-    width: 680px;
-    height: 680px;
-  }
-
-  .analysis-shell .app-board-width {
-    width: 680px;
-  }
-
-  .analysis-shell .app-board-height {
-    height: 680px;
-  }
-
-  .analysis-shell .app-panel-size {
-    width: 480px;
-    min-width: 480px;
-    height: 744px;
-  }
 }
 
 @media (min-width: 1280px) and (min-aspect-ratio: 16/10) and (max-resolution: 1.1dppx) {
-  .analysis-shell {
-    justify-content: center !important;
-  }
-
-  .analysis-shell .app-board-size {
-    width: 760px;
-    height: 760px;
-  }
-
-  .analysis-shell .app-board-width {
-    width: 760px;
-  }
-
-  .analysis-shell .app-board-height {
-    height: 760px;
-  }
-
-  .analysis-shell .app-panel-size {
-    width: 560px;
-    min-width: 560px;
-    height: min(840px, calc(100dvh - 32px));
-  }
-
   .home-page {
     --home-card-width: 405px;
     --home-card-gap: 24px;

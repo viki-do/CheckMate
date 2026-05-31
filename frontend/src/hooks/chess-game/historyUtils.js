@@ -45,6 +45,7 @@ export const createBotMoveEntry = ({
     from: botMove.from,
     to: botMove.to,
     fen,
+    eval: botMove.evaluation,
     t: thinkTime,
     num: moveNumber,
     wTime: whiteTime,

@@ -20,12 +20,13 @@ const normalizeHistoryIndex = (index, historyLength) => {
 export const getHistoryNavigationSoundName = (history = [], currentIndex = -1, nextIndex = -1) => {
     if (!history.length) return null;
 
+    const hasStartMove = history[0]?.m === "start";
     const rawCurrent = Number.parseInt(currentIndex, 10);
     const rawNext = Number.parseInt(nextIndex, 10);
     const isAtStartingPosition = Number.isFinite(rawCurrent) && rawCurrent <= -2;
     const goesToStartingPosition = Number.isFinite(rawNext) && rawNext <= -2;
 
-    if ((isAtStartingPosition && rawNext === 0) || (rawCurrent === 0 && goesToStartingPosition)) {
+    if (hasStartMove && ((isAtStartingPosition && rawNext === 0) || (rawCurrent === 0 && goesToStartingPosition))) {
         return getMoveSoundName(getMoveNotation(history[0]));
     }
 

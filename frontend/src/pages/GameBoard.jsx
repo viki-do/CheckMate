@@ -49,6 +49,19 @@ const findPreviousKnownEval = (history = [], fromIndex = history.length) => {
     return undefined;
 };
 
+const getScreenLayoutMode = () => {
+    if (typeof window === 'undefined') return '';
+    const screenWidth = Math.max(window.screen?.width || 0, window.screen?.availWidth || 0);
+    const screenHeight = Math.max(window.screen?.height || 0, window.screen?.availHeight || 0);
+    if (!screenWidth || !screenHeight) return '';
+
+    const ratio = screenWidth / screenHeight;
+    if (screenWidth >= 2100 && screenWidth <= 2250 && screenHeight >= 1350 && screenHeight <= 1500 && ratio >= 1.45 && ratio <= 1.55) {
+        return 'layout-2160x1440';
+    }
+    return '';
+};
+
 const GameBoard = () => {
     
     // --- 1. MINDEN STATE DEKLARÁCIÓ AZ ELEJÉRE ---
@@ -67,6 +80,7 @@ const GameBoard = () => {
     const [userName, setUserName] = useState("You");
     const [userAvatarUrl, setUserAvatarUrl] = useState("");
     const [positionEvalByFen, setPositionEvalByFen] = useState({});
+    const [screenLayoutMode, setScreenLayoutMode] = useState(() => getScreenLayoutMode());
 
 
     // --- 2. HOOK ÉS NAVIGÁCIÓ ---
@@ -100,6 +114,7 @@ const GameBoard = () => {
     const displayFen = shouldShowDefaultBoard ? DEFAULT_FEN : fen;
     const displayedHistoryIndex = viewIndex === -1 ? history.length - 1 : Number.parseInt(viewIndex, 10);
     const displayedHistoryMove = Number.isInteger(displayedHistoryIndex) ? history[displayedHistoryIndex] : null;
+    const isDisplayedStartMove = displayedHistoryMove?.m === 'start';
     const previousKnownEval = findPreviousKnownEval(history, displayedHistoryIndex);
     const currentEvalValue = normalizeEvalForBar(
         displayedHistoryMove?.eval ?? positionEvalByFen[displayFen],
@@ -135,6 +150,13 @@ const GameBoard = () => {
     }, []);
 
     useEffect(() => {
+        const updateLayoutMode = () => setScreenLayoutMode(getScreenLayoutMode());
+        updateLayoutMode();
+        window.addEventListener('resize', updateLayoutMode);
+        return () => window.removeEventListener('resize', updateLayoutMode);
+    }, []);
+
+    useEffect(() => {
         if (!token) return;
 
         let isMounted = true;
@@ -163,18 +185,18 @@ const GameBoard = () => {
 
     useEffect(() => {
         if (!shouldShowEvalBar || !API_BASE || !token || !displayFen || displayFen === DEFAULT_FEN) return;
+        if (isDisplayedStartMove) return;
         if (displayedHistoryMove?.eval !== undefined && displayedHistoryMove?.eval !== null) return;
         if (positionEvalByFen[displayFen] !== undefined) return;
 
         let isMounted = true;
+        const targetFen = displayFen;
+        const targetHistoryIndex = displayedHistoryIndex;
         const loadPositionEval = async () => {
             try {
-                const previousEval = history
-                    .slice()
-                    .reverse()
-                    .find((move) => move?.eval !== undefined && move?.eval !== null)?.eval;
+                const previousEval = findPreviousKnownEval(history, targetHistoryIndex);
                 const res = await axios.post(`${API_BASE}/analyze-sandbox-move`, {
-                    fen_before: displayFen,
+                    fen_before: targetFen,
                     move: null,
                     prev_eval: normalizeEvalForBar(previousEval, 0) * 100,
                 }, { headers: { Authorization: `Bearer ${token}` } });
@@ -184,11 +206,11 @@ const GameBoard = () => {
                 const nextEval = Number.isFinite(rawEval)
                     ? rawEval / 100
                     : normalizeEvalForBar(res.data?.eval, 0);
-                setPositionEvalByFen((current) => ({ ...current, [displayFen]: nextEval }));
+                setPositionEvalByFen((current) => ({ ...current, [targetFen]: nextEval }));
 
-                if (displayedHistoryMove?.fen === displayFen) {
+                if (Number.isInteger(targetHistoryIndex)) {
                     setHistory((current) => current.map((move, index) => (
-                        index === displayedHistoryIndex
+                        index === targetHistoryIndex && move?.fen === targetFen
                             ? { ...move, eval: nextEval, rawEval: Number.isFinite(rawEval) ? rawEval : move.rawEval }
                             : move
                     )));
@@ -200,7 +222,7 @@ const GameBoard = () => {
 
         loadPositionEval();
         return () => { isMounted = false; };
-    }, [shouldShowEvalBar, API_BASE, token, displayFen, displayedHistoryIndex, displayedHistoryMove?.eval, displayedHistoryMove?.fen, history, positionEvalByFen, setHistory]);
+    }, [shouldShowEvalBar, API_BASE, token, displayFen, displayedHistoryIndex, displayedHistoryMove?.eval, isDisplayedStartMove, history, positionEvalByFen, setHistory]);
 
     useEffect(() => {
         if (!archiveGameId || gameLogic.isLoading) return;
@@ -245,7 +267,7 @@ const GameBoard = () => {
         const targetMove = history[targetIndex];
 
         setViewIndex(targetIndex);
-        if (targetIndex === 0 || targetMove?.m === 'start') {
+        if (targetMove?.m === 'start') {
             setFen(DEFAULT_FEN);
             setLastMove({ from: null, to: null });
             return;
@@ -321,7 +343,7 @@ const GameBoard = () => {
         if (viewIndex === -1) {
             return color === 'w' ? whiteTime : blackTime;
         }
-        if (viewIndex === 0 || history[viewIndex]?.m === "start") {
+        if (history[viewIndex]?.m === "start") {
             return baseTime;
         }
         const move = history[viewIndex];
@@ -498,7 +520,7 @@ const GameBoard = () => {
         if (!move) return;
         playNavSound(index);
         syncBotGameMoveUrl(index);
-        if (index === 0 || move.m === 'start') {
+        if (move.m === 'start') {
             setFen(DEFAULT_FEN);
             setLastMove({ from: null, to: null });
             setViewIndex(0);
@@ -687,7 +709,7 @@ const GameBoard = () => {
     };
 
     return (
-        <div className="analysis-shell flex min-h-dvh w-full flex-col items-center justify-start bg-[#1e1e1e] gap-4 p-3 overflow-y-auto overflow-x-hidden select-none relative md:h-dvh md:flex-row md:justify-center md:p-4 md:overflow-hidden xl:gap-6">
+        <div className={`analysis-shell ${screenLayoutMode} flex min-h-dvh w-full flex-col items-center justify-start bg-[#1e1e1e] gap-4 p-3 overflow-y-auto overflow-x-hidden select-none relative md:h-dvh md:flex-row md:justify-center md:p-4 md:overflow-hidden xl:gap-6`}>
             {!shouldShowEvalBar && <CapturedProgressBar />}
             {shouldShowEvalBar && (
                 <AnalyzeEvalBar whiteBarHeight={whiteBarHeight} currentEvalValue={currentEvalValue} />
