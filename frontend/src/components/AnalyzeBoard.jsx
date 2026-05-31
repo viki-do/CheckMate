@@ -362,6 +362,7 @@ const AnalyzeBoard = () => {
     const [previewFen, setPreviewFen] = useState(null);
     const [rightPanelMode, setRightPanelMode] = useState('analysis'); // 'analysis' vagy 'setup'
     const [initialAnalysis, setInitialAnalysis] = useState(null);
+    const [positionEvalByFen, setPositionEvalByFen] = useState({});
     const [sandboxStatus, setSandboxStatus] = useState('ongoing');
     const [sandboxStatusReason, setSandboxStatusReason] = useState('');
     const [sandboxResult, setSandboxResult] = useState('');
@@ -847,6 +848,72 @@ const AnalyzeBoard = () => {
         setSandboxStatus(status);
         setSandboxStatusReason(reason);
     }, [sandboxFen]);
+
+    useEffect(() => {
+        if (!API_BASE || !token || !sandboxFen || previewFen) return;
+        if (isAnalyzing || isMasterReviewRoute || isBotReviewRoute || isBotSelfAnalysisRoute) return;
+
+        const targetIndex = viewIndex === -1 ? sandboxHistory.length - 1 : Number.parseInt(viewIndex, 10);
+        const targetMove = Number.isInteger(targetIndex) ? sandboxHistory[targetIndex] : null;
+        const targetFen = viewIndex === -1 ? sandboxFen : (targetMove?.fen || sandboxFen);
+        if (!targetFen || positionEvalByFen[targetFen] !== undefined) return;
+        if (targetMove?.eval !== undefined && targetMove?.eval !== null) return;
+        if (!targetMove && initialAnalysis?.eval !== undefined && targetFen === sandboxStartingFen) return;
+
+        let isMounted = true;
+        const loadPositionEval = async () => {
+            try {
+                const previousEval = findPreviousKnownEval(sandboxHistory, targetIndex);
+                const res = await axios.post(`${API_BASE}/analyze-sandbox-move`, {
+                    fen_before: targetFen,
+                    move: null,
+                    prev_eval: normalizeEvalForBar(previousEval, initialAnalysis?.eval ?? 0) * 100,
+                }, { headers: { Authorization: `Bearer ${token}` } });
+                if (!isMounted || res.data?.error) return;
+
+                const rawEval = Number(res.data?.eval);
+                const nextEval = Number.isFinite(rawEval)
+                    ? rawEval / 100
+                    : normalizeEvalForBar(res.data?.eval, initialAnalysis?.eval ?? 0);
+
+                setPositionEvalByFen((current) => ({ ...current, [targetFen]: nextEval }));
+
+                if (targetMove?.fen === targetFen && Number.isInteger(targetIndex)) {
+                    setSandboxHistory((current) => current.map((move, index) => (
+                        index === targetIndex && move?.fen === targetFen
+                            ? { ...move, eval: nextEval, rawEval: Number.isFinite(rawEval) ? rawEval : move.rawEval }
+                            : move
+                    )));
+                }
+
+                if (!targetMove && sandboxHistory.length === 0 && targetFen === sandboxFen) {
+                    setInitialAnalysis((current) => current || {
+                        eval: nextEval,
+                        engineLines: res.data?.engine_lines || [],
+                    });
+                }
+            } catch (err) {
+                console.error('Position eval failed:', err);
+            }
+        };
+
+        loadPositionEval();
+        return () => { isMounted = false; };
+    }, [
+        API_BASE,
+        token,
+        sandboxFen,
+        previewFen,
+        viewIndex,
+        sandboxHistory,
+        positionEvalByFen,
+        initialAnalysis,
+        sandboxStartingFen,
+        isAnalyzing,
+        isMasterReviewRoute,
+        isBotReviewRoute,
+        isBotSelfAnalysisRoute,
+    ]);
 
     useEffect(() => {
         if (!isCollectionAnalysisRoute || viewIndex < 0 || !API_BASE || !token) return;
@@ -1546,6 +1613,7 @@ const handleFullReview = async ({ stayOnIntro = false } = {}) => {
         const normalizedFen = normalizeSetupFen(nextFen, setupTurn);
         setSandboxFen(normalizedFen);
         setSandboxStartingFen(normalizedFen);
+        setInitialAnalysis(null);
         setIsSandboxReviewComplete(false);
         setIsSandboxReviewLocked(false);
         setMasterReviewStarted(false);
@@ -1740,12 +1808,13 @@ const handleExternalDrop = (e, row, col) => {
 
     const activeHistoryIndex = viewIndex === -1 ? sandboxHistory.length - 1 : Number.parseInt(viewIndex, 10);
     const previousKnownEval = findPreviousKnownEval(sandboxHistory, activeHistoryIndex);
+    const currentPositionEval = positionEvalByFen[currentFen];
     const currentEvalValue = viewIndex === -1
         ? (sandboxHistory.length > 0
-            ? normalizeEvalForBar(sandboxHistory[sandboxHistory.length - 1].eval, normalizeEvalForBar(previousKnownEval, initialAnalysis?.eval ?? 0))
-            : normalizeEvalForBar(initialAnalysis?.eval, 0))
+            ? normalizeEvalForBar(sandboxHistory[sandboxHistory.length - 1].eval ?? currentPositionEval, normalizeEvalForBar(previousKnownEval, initialAnalysis?.eval ?? 0))
+            : normalizeEvalForBar(currentPositionEval ?? initialAnalysis?.eval, 0))
         : normalizeEvalForBar(
-            sandboxHistory[activeHistoryIndex]?.eval,
+            sandboxHistory[activeHistoryIndex]?.eval ?? currentPositionEval,
             normalizeEvalForBar(previousKnownEval, initialAnalysis?.eval ?? 0)
         );
     const whiteBarHeight = Math.min(Math.max(50 + (currentEvalValue * 10), 5), 95);
