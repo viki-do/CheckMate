@@ -1,11 +1,26 @@
 import { MoveIcon, MoveNotation } from './MoveNotation';
 import { getHistoryIndex } from './moveListUtils';
+import { formatBarScaleEval, getDisplayEvalForMove, getTerminalEvalForFen } from '../../utils/evaluationDisplay';
 
-const MoveRows = ({ rows, history, viewIndex, goToMove }) => (
+const DEFAULT_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+
+const formatMoveEval = (move, positionEvalByFen) => {
+    if (!move) return null;
+    const terminal = getTerminalEvalForFen(move.fen, DEFAULT_FEN);
+    if (terminal?.result) return terminal.result;
+
+    const value = getDisplayEvalForMove(move, positionEvalByFen);
+    if (value === undefined || value === null) return null;
+    return formatBarScaleEval(value);
+};
+
+const MoveRows = ({ rows, history, viewIndex, goToMove, positionEvalByFen = {} }) => (
     <div className="flex flex-col">
         {rows.map((row, i) => {
             const whiteIdx = getHistoryIndex(history, row.white);
             const blackIdx = getHistoryIndex(history, row.black);
+            const whiteEval = formatMoveEval(row.white, positionEvalByFen);
+            const blackEval = formatMoveEval(row.black, positionEvalByFen);
             return (
                 <div key={i} className={`flex h-10 items-center ${i % 2 === 0 ? 'bg-[#2b2926]' : 'bg-transparent'}`}>
                     <div className="w-10 text-center text-[#666] text-[13px] font-semibold shrink-0">{row.moveNumber}.</div>
@@ -34,15 +49,15 @@ const MoveRows = ({ rows, history, viewIndex, goToMove }) => (
 
                     <div className="w-20 flex flex-col justify-center pr-3 border-l border-chess-bg/30">
                         <div className="flex items-center justify-end gap-1 leading-none text-[10px] text-[#989795]">
-                            {row.white?.eval !== undefined && (
-                                <span className="mr-1 text-[#666] font-mono">{row.white.eval > 0 ? `+${row.white.eval}` : row.white.eval}</span>
+                            {whiteEval !== null && (
+                                <span className="mr-1 text-[#666] font-mono">{whiteEval}</span>
                             )}
                             {row.white?.t !== undefined ? row.white.t.toFixed(1) : "0.0"}s
                         </div>
                         {row.black && (
                             <div className="flex items-center justify-end gap-1 leading-none text-[10px] text-[#666]">
-                                {row.black.eval !== undefined && (
-                                    <span className="mr-1 text-[#444] font-mono">{row.black.eval > 0 ? `+${row.black.eval}` : row.black.eval}</span>
+                                {blackEval !== null && (
+                                    <span className="mr-1 text-[#444] font-mono">{blackEval}</span>
                                 )}
                                 {row.black.t !== undefined ? row.black.t.toFixed(1) : "0.0"}s
                             </div>

@@ -13,6 +13,14 @@ import { getHistoryNavigationSoundName } from '../hooks/chess-game/soundUtils';
 import SaveCollectionModal from '../components/analyze-board/SaveCollectionModal.jsx';
 import AnalyzeEvalBar from '../components/analyze-board/AnalyzeEvalBar.jsx';
 import { profileAvatarSrc } from '../config/api.js';
+import {
+    getDisplayEvalForMove,
+    getFirstEngineLineEval,
+    getTerminalEvalForFen,
+    getWhiteBarHeightFromEval,
+    hasReliableMoveEval,
+    normalizeEvalForBar,
+} from '../utils/evaluationDisplay.js';
 
 const DEFAULT_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
@@ -29,58 +37,6 @@ const buildMoveText = (history = []) => (
 const getLatestHistoryFen = (history = [], fallbackFen = DEFAULT_FEN) => (
     getPlayableHistory(history).at(-1)?.fen || fallbackFen
 );
-
-const normalizeEvalForBar = (value, fallback = 0) => {
-    if (typeof value === 'string' && value.startsWith('M')) {
-        const mateValue = Number(value.slice(1));
-        if (Number.isFinite(mateValue)) return mateValue >= 0 ? 9 : -9;
-    }
-    const numeric = Number(value);
-    return Number.isFinite(numeric) ? numeric : fallback;
-};
-
-const getFirstEngineLineEval = (source) => {
-    const lines = source?.engineLines || source?.engine_lines || [];
-    const firstLine = Array.isArray(lines) ? lines[0] : null;
-    return firstLine?.eval ?? firstLine?.raw_eval ?? firstLine?.rawEval;
-};
-
-const getTerminalEvalForFen = (fenValue) => {
-    try {
-        const board = new Chess(fenValue || DEFAULT_FEN);
-        if (board.isCheckmate()) {
-            return board.turn() === 'w' ? -9 : 9;
-        }
-        if (board.isStalemate() || board.isDraw()) {
-            return 0;
-        }
-    } catch {
-        return undefined;
-    }
-    return undefined;
-};
-
-const findPreviousKnownEval = (history = [], fromIndex = history.length) => {
-    for (let i = Math.min(fromIndex - 1, history.length - 1); i >= 0; i -= 1) {
-        const value = history[i]?.eval;
-        if (value !== undefined && value !== null) {
-            return value;
-        }
-    }
-    return undefined;
-};
-
-const hasReliableMoveEval = (move) => {
-    if (move?.eval === undefined || move?.eval === null) return false;
-    if (move.eval !== 0) return true;
-    return (
-        move.rawEval !== undefined ||
-        move.raw_eval !== undefined ||
-        Boolean(move.engineLines?.length) ||
-        Boolean(move.engine_lines?.length) ||
-        Boolean(move.analysisLabel)
-    );
-};
 
 const findPreviousBarEval = (history = [], fromIndex = history.length, evalByFen = {}) => {
     for (let i = Math.min(fromIndex - 1, history.length - 1); i >= 0; i -= 1) {
@@ -160,13 +116,17 @@ const GameBoard = () => {
     const displayedHistoryMove = Number.isInteger(displayedHistoryIndex) ? history[displayedHistoryIndex] : null;
     const isDisplayedStartMove = displayedHistoryMove?.m === 'start';
     const previousKnownEval = findPreviousBarEval(history, displayedHistoryIndex, positionEvalByFen);
-    const terminalEval = getTerminalEvalForFen(displayFen);
-    const displayedMoveEval = positionEvalByFen[displayFen] ?? getFirstEngineLineEval(displayedHistoryMove) ?? (hasReliableMoveEval(displayedHistoryMove) ? displayedHistoryMove.eval : undefined);
+    const terminalEval = getTerminalEvalForFen(displayFen, DEFAULT_FEN);
+    const displayedMoveEval = getDisplayEvalForMove(displayedHistoryMove, positionEvalByFen);
     const currentEvalValue = normalizeEvalForBar(
-        terminalEval ?? displayedMoveEval,
+        terminalEval?.eval ?? displayedMoveEval,
         normalizeEvalForBar(previousKnownEval, 0)
     );
-    const whiteBarHeight = Math.min(Math.max(50 + (currentEvalValue * 10), 5), 95);
+    const whiteBarHeight = terminalEval?.winner === 'white'
+        ? 100
+        : terminalEval?.winner === 'black'
+            ? 0
+            : getWhiteBarHeightFromEval(currentEvalValue);
     const shouldShowEvalBar = (location.pathname === '/play/bots' && !shouldShowDefaultBoard) || isBotGameRoute || Boolean(archiveGameId);
     const displayIsFlipped = shouldShowDefaultBoard ? defaultBoardIsFlipped : isFlipped;
     const captured = getCapturedPieces(displayFen);
@@ -232,7 +192,7 @@ const GameBoard = () => {
     useEffect(() => {
         if (!shouldShowEvalBar || !API_BASE || !token || !displayFen || displayFen === DEFAULT_FEN) return;
         if (isDisplayedStartMove) return;
-        if (getTerminalEvalForFen(displayFen) !== undefined) return;
+        if (getTerminalEvalForFen(displayFen, DEFAULT_FEN) !== undefined) return;
         if (positionEvalByFen[displayFen] !== undefined) return;
 
         let isMounted = true;
@@ -248,6 +208,13 @@ const GameBoard = () => {
                 }, { headers: { Authorization: `Bearer ${token}` } });
                 if (!isMounted) return;
 
+                const engineLines = res.data?.engine_lines || res.data?.engineLines || [];
+                const analysisFailed = (
+                    res.data?.error ||
+                    (!engineLines.length && !res.data?.best_move && Number(res.data?.eval) === 0)
+                );
+                if (analysisFailed) return;
+
                 const lineEval = getFirstEngineLineEval(res.data);
                 const rawEval = Number(res.data?.eval);
                 const nextEval = lineEval !== undefined && lineEval !== null
@@ -260,7 +227,7 @@ const GameBoard = () => {
                 if (Number.isInteger(targetHistoryIndex)) {
                     setHistory((current) => current.map((move, index) => (
                         index === targetHistoryIndex && move?.fen === targetFen
-                            ? { ...move, eval: nextEval, rawEval: Number.isFinite(rawEval) ? rawEval : move.rawEval, engineLines: res.data?.engine_lines || move.engineLines }
+                            ? { ...move, eval: nextEval, rawEval: Number.isFinite(rawEval) ? rawEval : move.rawEval, engineLines: engineLines || move.engineLines }
                             : move
                     )));
                 }
@@ -761,7 +728,12 @@ const GameBoard = () => {
         <div className={`analysis-shell ${screenLayoutMode} flex min-h-dvh w-full flex-col items-center justify-start bg-[#1e1e1e] gap-4 p-3 overflow-y-auto overflow-x-hidden select-none relative md:h-dvh md:flex-row md:justify-center md:p-4 md:overflow-hidden xl:gap-6`}>
             {!shouldShowEvalBar && <CapturedProgressBar />}
             {shouldShowEvalBar && (
-                <AnalyzeEvalBar whiteBarHeight={whiteBarHeight} currentEvalValue={currentEvalValue} />
+                <AnalyzeEvalBar
+                    whiteBarHeight={whiteBarHeight}
+                    currentEvalValue={currentEvalValue}
+                    terminalResult={terminalEval?.result}
+                    terminalWinner={terminalEval?.winner}
+                />
             )}
 
             <div className="flex w-full flex-col items-center justify-center shrink-0 md:h-full md:w-auto">
@@ -837,6 +809,7 @@ const GameBoard = () => {
                 onAddToCollection: () => setIsSaveCollectionOpen(true),
                 onDeleteGame: handleDeleteGame,
                 isArchiveGame: Boolean(archiveGameId),
+                positionEvalByFen,
             }} />
             </div>
 

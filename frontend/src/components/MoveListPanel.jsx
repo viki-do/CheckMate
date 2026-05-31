@@ -32,7 +32,8 @@ const MoveListPanel = ({
     isAnalyzing,
     onAddToCollection,
     onDeleteGame,
-    isArchiveGame = false
+    isArchiveGame = false,
+    positionEvalByFen = {}
 }) => {
     const isOngoing = status === "ongoing";
     const isGameOver = ["resigned", "checkmate", "draw", "stalemate", "aborted", "finished"].includes(status);
@@ -68,6 +69,7 @@ const MoveListPanel = ({
                     history={history}
                     viewIndex={viewIndex}
                     goToMove={goToMove}
+                    positionEvalByFen={positionEvalByFen}
                 />
                 <EndGameSummary finalResult={finalResult} showEndGameUI={showEndGameUI} />
             </div>
