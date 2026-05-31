@@ -71,6 +71,21 @@ const getFirstEngineLineEval = (move) => {
     return firstLine?.eval ?? firstLine?.raw_eval ?? firstLine?.rawEval;
 };
 
+const getTerminalEvalForFen = (fenValue) => {
+    try {
+        const board = new Chess(fenValue || DEFAULT_FEN);
+        if (board.isCheckmate()) {
+            return board.turn() === 'w' ? -9 : 9;
+        }
+        if (board.isStalemate() || board.isDraw()) {
+            return 0;
+        }
+    } catch {
+        return undefined;
+    }
+    return undefined;
+};
+
 const getMoveEvalForBar = (move, fallback = 0) => {
     if (!move) return normalizeEvalForBar(undefined, fallback);
 
@@ -1844,15 +1859,16 @@ const handleExternalDrop = (e, row, col) => {
     const activeHistoryIndex = viewIndex === -1 ? sandboxHistory.length - 1 : Number.parseInt(viewIndex, 10);
     const previousKnownEval = findPreviousBarEval(sandboxHistory, activeHistoryIndex, positionEvalByFen);
     const currentPositionEval = positionEvalByFen[currentFen];
+    const terminalEval = getTerminalEvalForFen(currentFen);
     const evalFallback = normalizeEvalForBar(previousKnownEval, initialAnalysis?.eval ?? 0);
-    const currentEvalValue = viewIndex === -1
+    const currentEvalValue = terminalEval ?? (viewIndex === -1
         ? (sandboxHistory.length > 0
             ? getMoveEvalForBar(sandboxHistory[sandboxHistory.length - 1], normalizeEvalForBar(currentPositionEval, evalFallback))
             : normalizeEvalForBar(currentPositionEval ?? getFirstEngineLineEval(initialAnalysis) ?? initialAnalysis?.eval, 0))
         : getMoveEvalForBar(
             sandboxHistory[activeHistoryIndex],
             normalizeEvalForBar(currentPositionEval, evalFallback)
-        );
+        ));
     const whiteBarHeight = Math.min(Math.max(50 + (currentEvalValue * 10), 5), 95);
     const hasActiveSandboxState =
         sandboxHistory.length > 0 ||

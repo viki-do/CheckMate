@@ -45,6 +45,21 @@ const getFirstEngineLineEval = (source) => {
     return firstLine?.eval ?? firstLine?.raw_eval ?? firstLine?.rawEval;
 };
 
+const getTerminalEvalForFen = (fenValue) => {
+    try {
+        const board = new Chess(fenValue || DEFAULT_FEN);
+        if (board.isCheckmate()) {
+            return board.turn() === 'w' ? -9 : 9;
+        }
+        if (board.isStalemate() || board.isDraw()) {
+            return 0;
+        }
+    } catch {
+        return undefined;
+    }
+    return undefined;
+};
+
 const findPreviousKnownEval = (history = [], fromIndex = history.length) => {
     for (let i = Math.min(fromIndex - 1, history.length - 1); i >= 0; i -= 1) {
         const value = history[i]?.eval;
@@ -145,9 +160,10 @@ const GameBoard = () => {
     const displayedHistoryMove = Number.isInteger(displayedHistoryIndex) ? history[displayedHistoryIndex] : null;
     const isDisplayedStartMove = displayedHistoryMove?.m === 'start';
     const previousKnownEval = findPreviousBarEval(history, displayedHistoryIndex, positionEvalByFen);
+    const terminalEval = getTerminalEvalForFen(displayFen);
     const displayedMoveEval = positionEvalByFen[displayFen] ?? getFirstEngineLineEval(displayedHistoryMove) ?? (hasReliableMoveEval(displayedHistoryMove) ? displayedHistoryMove.eval : undefined);
     const currentEvalValue = normalizeEvalForBar(
-        displayedMoveEval,
+        terminalEval ?? displayedMoveEval,
         normalizeEvalForBar(previousKnownEval, 0)
     );
     const whiteBarHeight = Math.min(Math.max(50 + (currentEvalValue * 10), 5), 95);
@@ -216,6 +232,7 @@ const GameBoard = () => {
     useEffect(() => {
         if (!shouldShowEvalBar || !API_BASE || !token || !displayFen || displayFen === DEFAULT_FEN) return;
         if (isDisplayedStartMove) return;
+        if (getTerminalEvalForFen(displayFen) !== undefined) return;
         if (positionEvalByFen[displayFen] !== undefined) return;
 
         let isMounted = true;
