@@ -1,17 +1,39 @@
 import { MoveIcon, MoveNotation } from './MoveNotation';
 import { getHistoryIndex } from './moveListUtils';
-import { formatBarScaleEval, getDisplayEvalForMove, getTerminalEvalForFen } from '../../utils/evaluationDisplay';
+import {
+    formatMoveImpactEval,
+    getDisplayEvalForMove,
+    getTerminalEvalForFen,
+} from '../../utils/evaluationDisplay';
 
 const DEFAULT_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
-const formatMoveEval = (move, positionEvalByFen, evalPerspective) => {
+const getPreviousKnownEval = (history, beforeIndex, positionEvalByFen) => {
+    for (let i = beforeIndex - 1; i >= 0; i -= 1) {
+        const move = history[i];
+        if (!move || move.m === 'start') return 0;
+
+        const terminal = getTerminalEvalForFen(move.fen, DEFAULT_FEN);
+        if (terminal?.eval !== undefined) return terminal.eval;
+
+        const value = getDisplayEvalForMove(move, positionEvalByFen);
+        if (value !== undefined && value !== null) return value;
+    }
+    return 0;
+};
+
+const formatMoveEval = (move, history, moveIndex, positionEvalByFen, evalPerspective) => {
     if (!move) return null;
     const terminal = getTerminalEvalForFen(move.fen, DEFAULT_FEN);
     if (terminal?.result) return terminal.result;
 
     const value = getDisplayEvalForMove(move, positionEvalByFen);
     if (value === undefined || value === null) return null;
-    return formatBarScaleEval(value, null, evalPerspective);
+    return formatMoveImpactEval(
+        value,
+        getPreviousKnownEval(history, moveIndex, positionEvalByFen),
+        evalPerspective
+    );
 };
 
 const MoveRows = ({ rows, history, viewIndex, goToMove, positionEvalByFen = {}, evalPerspective = 'white' }) => (
@@ -19,8 +41,8 @@ const MoveRows = ({ rows, history, viewIndex, goToMove, positionEvalByFen = {}, 
         {rows.map((row, i) => {
             const whiteIdx = getHistoryIndex(history, row.white);
             const blackIdx = getHistoryIndex(history, row.black);
-            const whiteEval = formatMoveEval(row.white, positionEvalByFen, evalPerspective);
-            const blackEval = formatMoveEval(row.black, positionEvalByFen, evalPerspective);
+            const whiteEval = formatMoveEval(row.white, history, whiteIdx, positionEvalByFen, evalPerspective);
+            const blackEval = formatMoveEval(row.black, history, blackIdx, positionEvalByFen, evalPerspective);
             return (
                 <div key={i} className={`flex h-10 items-center ${i % 2 === 0 ? 'bg-[#2b2926]' : 'bg-transparent'}`}>
                     <div className="w-10 text-center text-[#666] text-[13px] font-semibold shrink-0">{row.moveNumber}.</div>

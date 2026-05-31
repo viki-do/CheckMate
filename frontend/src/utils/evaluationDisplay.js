@@ -13,6 +13,11 @@ export const getWhiteBarHeightFromEval = (value) => (
     Math.min(Math.max(50 + (normalizeEvalForBar(value, 0) * 10), 5), 95)
 );
 
+export const getPerspectiveBarHeightFromEval = (value, perspective = 'white') => {
+    const normalized = normalizeEvalForBar(value, 0);
+    return getWhiteBarHeightFromEval(perspective === 'black' ? -normalized : normalized);
+};
+
 export const getFirstEngineLineEval = (source) => {
     const lines = source?.engineLines || source?.engine_lines || [];
     const firstLine = Array.isArray(lines) ? lines[0] : null;
@@ -61,9 +66,7 @@ export const getDisplayEvalForMove = (move, evalByFen = {}) => (
 export const formatBarScaleEval = (value, terminalResult = null, perspective = 'white') => {
     if (terminalResult) return terminalResult;
 
-    const normalized = normalizeEvalForBar(value, 0);
-    const perspectiveEval = perspective === 'black' ? -normalized : normalized;
-    const whiteHeight = getWhiteBarHeightFromEval(perspectiveEval);
+    const whiteHeight = getPerspectiveBarHeightFromEval(value, perspective);
     const whiteShare = Math.round(whiteHeight);
     const blackShare = 100 - whiteShare;
 
@@ -71,4 +74,13 @@ export const formatBarScaleEval = (value, terminalResult = null, perspective = '
 
     const signedShare = whiteShare > 50 ? whiteShare / 10 : -(blackShare / 10);
     return `${signedShare > 0 ? '+' : ''}${signedShare.toFixed(1)}`;
+};
+
+export const formatMoveImpactEval = (currentValue, previousValue = 0, perspective = 'white') => {
+    const currentHeight = getPerspectiveBarHeightFromEval(currentValue, perspective);
+    const previousHeight = getPerspectiveBarHeightFromEval(previousValue, perspective);
+    const delta = (currentHeight - previousHeight) / 10;
+
+    if (Math.abs(delta) < 0.05) return '0.0';
+    return `${delta > 0 ? '+' : ''}${delta.toFixed(1)}`;
 };
