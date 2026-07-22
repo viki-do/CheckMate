@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useRef } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Chess } from 'chess.js';
 
@@ -10,6 +10,7 @@ const piecesMap = {
 const ChessBoardGrid = ({ gameLogic, onMouseDown, onMouseUp, onDrop }) => {
     const boardInstanceId = useId();
     const boardRef = useRef(null); // Ref a táblához a passzív eseménykezelő fixhez
+    const [squareSize, setSquareSize] = useState(80);
 
     const {
         fen,
@@ -46,6 +47,21 @@ const ChessBoardGrid = ({ gameLogic, onMouseDown, onMouseUp, onDrop }) => {
             boardElement.removeEventListener('touchstart', preventDefault);
             boardElement.removeEventListener('touchmove', preventDefault);
         };
+    }, []);
+
+    useEffect(() => {
+        const boardElement = boardRef.current;
+        if (!boardElement) return;
+
+        const updateSquareSize = () => {
+            setSquareSize(Math.min(boardElement.clientWidth, boardElement.clientHeight) / 8);
+        };
+
+        updateSquareSize();
+        const resizeObserver = new ResizeObserver(updateSquareSize);
+        resizeObserver.observe(boardElement);
+
+        return () => resizeObserver.disconnect();
     }, []);
 
     let activeKingSquare = null;
@@ -195,8 +211,8 @@ const ChessBoardGrid = ({ gameLogic, onMouseDown, onMouseUp, onDrop }) => {
                         draggable="false"
                         className="pointer-events-none fixed" 
                         style={{
-                            width: '80px',
-                            height: '80px',
+                            width: squareSize,
+                            height: squareSize,
                             zIndex: 99999,
                             filter: 'drop-shadow(0px 10px 20px rgba(0,0,0,0.4))',
                             left: 0,
@@ -204,9 +220,9 @@ const ChessBoardGrid = ({ gameLogic, onMouseDown, onMouseUp, onDrop }) => {
                         }}
                         initial={false}
                         animate={{ 
-                            x: mousePos.x - 40,
-                            y: mousePos.y - 40,
-                            scale: 1.1 
+                            x: mousePos.x - squareSize / 2,
+                            y: mousePos.y - squareSize / 2,
+                            scale: 1
                         }}
                         transition={{ type: "tween", ease: "linear", duration: 0 }}
                         exit={{ opacity: 0, scale: 1 }}
