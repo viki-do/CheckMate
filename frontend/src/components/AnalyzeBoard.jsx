@@ -1334,7 +1334,10 @@ const handleFullReview = async ({ stayOnIntro = false } = {}) => {
                     const refreshed = await axios.get(`${API_BASE}/game/${botReviewGameId}/history`, {
                         headers: { Authorization: `Bearer ${token}` },
                     });
-                    baseHistory = normalizeBotHistory(refreshed.data?.history || []);
+                    const refreshedHistory = normalizeBotHistory(refreshed.data?.history || []);
+                    if (refreshedHistory.length > 0) {
+                        baseHistory = refreshedHistory;
+                    }
                 } catch (refreshError) {
                     console.error("Could not refresh bot history after review:", refreshError);
                 }
