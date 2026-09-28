@@ -904,6 +904,7 @@ const AnalyzeBoard = () => {
         const targetMove = Number.isInteger(targetIndex) ? sandboxHistory[targetIndex] : null;
         const targetFen = viewIndex === -1 ? sandboxFen : (targetMove?.fen || sandboxFen);
         if (!targetFen || positionEvalByFen[targetFen] !== undefined) return;
+        if (!targetMove && sandboxHistory.length === 0 && targetFen === DEFAULT_FEN && !initialAnalysis) return;
         if (targetMove?.eval !== undefined && targetMove?.eval !== null) return;
         if (!targetMove && initialAnalysis?.eval !== undefined && targetFen === sandboxStartingFen) return;
 
