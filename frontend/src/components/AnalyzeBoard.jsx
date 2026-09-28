@@ -385,12 +385,12 @@ const AnalyzeBoard = () => {
     const isBotReviewRoute = Boolean(botReviewGameId);
     const botAnalysisGameId = botSelfAnalysisGameId || botReviewGameId;
     const isSavedAnalysisRoute = Boolean(savedAnalysisId);
-    const isCollectionAnalysisRoute = Boolean(collectionSlug && collectionGameId);
+    const isCollectionSettingsRoute = Boolean(collectionSlug && location.pathname.endsWith('/collection-settings'));
+    const isCollectionAnalysisRoute = Boolean(collectionSlug && (collectionGameId || isCollectionSettingsRoute));
     const isAnalysisGamesRoute = location.pathname === '/analysis/games';
     const isAnalysisExplorerRoute = location.pathname === '/analysis/explorer';
     const isCollectionGamesRoute = isCollectionAnalysisRoute && location.pathname.endsWith('/games');
     const isCollectionReviewRoute = isCollectionAnalysisRoute && location.pathname.endsWith('/review');
-    const isCollectionSettingsRoute = isCollectionAnalysisRoute && location.pathname.endsWith('/collection-settings');
     const chessContext = useChess();
     // --- ÁLLAPOTOK ---
     const [sandboxFen, setSandboxFen] = useState(DEFAULT_FEN);
@@ -552,6 +552,27 @@ const AnalyzeBoard = () => {
             const collections = await loadCollections();
             const publicId = extractPublicIdFromSlug(collectionSlug);
             const collection = collections.find((item) => item.publicId === publicId || getCollectionGames(item).some((game) => String(game.id) === String(decodedGameId)));
+            if (isCollectionSettingsRoute) {
+                if (!collection) {
+                    setPanelNotice('Could not load this collection.');
+                    return;
+                }
+                setCollectionContext({
+                    id: collection.id || '',
+                    name: collection.name || 'Collection',
+                    description: collection.description || '',
+                    ownerName: collection.ownerName || '',
+                    privacy: collection.privacy || 'private',
+                    participants: collection.participants || [],
+                    createdAt: collection.createdAt || '',
+                    updatedAt: collection.updatedAt || collection.createdAt || '',
+                });
+                setCollectionSavedGame(null);
+                setSandboxHistory([]);
+                setSandboxGameInfo(null);
+                setPanelNotice('');
+                return;
+            }
             const game = getCollectionGames(collection).find((item) => String(item.id) === String(decodedGameId));
             if (!game) {
                 setPanelNotice('Could not load this collection game.');
@@ -604,7 +625,7 @@ const AnalyzeBoard = () => {
         }
         };
         loadCollectionGame();
-    }, [isCollectionAnalysisRoute, isCollectionGamesRoute, collectionSlug, collectionGameId, searchParams]);
+    }, [isCollectionAnalysisRoute, isCollectionSettingsRoute, isCollectionGamesRoute, collectionSlug, collectionGameId, searchParams]);
 
     useEffect(() => {
         if (!isSavedAnalysisRoute || !savedAnalysisId) return;
@@ -2412,8 +2433,8 @@ const handleExternalDrop = (e, row, col) => {
                 collectionContext={isCollectionAnalysisRoute && !isCollectionReviewRoute ? collectionContext : null}
                 onCollectionBackClick={() => navigate('/analysis/collections')}
                 collectionSettingsMode={isCollectionSettingsRoute}
-                onCollectionSettingsClick={() => navigate(`/analysis/collection/${collectionSlug}/${encodeURIComponent(collectionGameId)}/collection-settings`)}
-                onCollectionSettingsBackClick={() => navigate(`/analysis/collection/${collectionSlug}/${encodeURIComponent(collectionGameId)}/games`)}
+                onCollectionSettingsClick={() => navigate(`/analysis/collection/${collectionSlug}/collection-settings`)}
+                onCollectionSettingsBackClick={() => navigate(`/analysis/collection/${collectionSlug}/games`)}
                 onUpdateCollection={handleUpdateCollectionSettings}
                 onDeleteCollection={handleDeleteCollection}
                 onReviewBackClick={

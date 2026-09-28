@@ -155,6 +155,10 @@ const App = () => {
                             path="/analysis/collection/:collectionSlug/:collectionGameId/collection-settings"
                             element={isAuthenticated ? <AnalyzeBoard /> : <Navigate to="/login" />}
                         />
+                        <Route
+                            path="/analysis/collection/:collectionSlug/collection-settings"
+                            element={isAuthenticated ? <AnalyzeBoard /> : <Navigate to="/login" />}
+                        />
                         <Route 
                             path="/analysis/game/master/:gameId/review" 
                             element={isAuthenticated ? <AnalyzeBoard /> : <Navigate to="/login" />} 

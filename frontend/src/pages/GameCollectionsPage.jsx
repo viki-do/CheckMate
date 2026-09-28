@@ -789,8 +789,7 @@ const GameCollectionsPage = () => {
                     }}
                     onReviewGame={(gameId) => navigate(`/analysis/collection/${getCollectionSlug(selectedCollection)}/${encodeURIComponent(gameId)}/analysis`)}
                     onSettings={(gameId) => {
-                        if (!gameId) return;
-                        navigate(`/analysis/collection/${getCollectionSlug(selectedCollection)}/${encodeURIComponent(gameId)}/collection-settings`);
+                        navigate(`/analysis/collection/${getCollectionSlug(selectedCollection)}/collection-settings`);
                     }}
                 />
             ) : (
